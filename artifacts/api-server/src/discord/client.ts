@@ -969,6 +969,60 @@ export async function startDiscordBot(): Promise<void> {
     } catch (err) {
       logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling role memory restore");
     }
+
+    // Welcomer
+    try {
+      const { getWelcomerConfig } = await import("./storage/welcomer");
+      const { generateWelcomeImage } = await import("./utils/welcomeImage");
+      const { buildWelcomerEmbed, buildWelcomerText, applyWelcomerPlaceholders } = await import("./utils/welcomeSender");
+      const { AttachmentBuilder, ChannelType } = await import("discord.js");
+
+      const wc = await getWelcomerConfig(member.guild.id);
+      if (!wc.enabled) return;
+
+      const user = member.user;
+      const guild = member.guild;
+      const count = guild.memberCount;
+
+      // Channel welcome
+      if (wc.channel.enabled && wc.channel.channelId) {
+        const ch = await guild.channels.fetch(wc.channel.channelId).catch(() => null);
+        if (ch && ch.type === ChannelType.GuildText) {
+          const textCh = ch as import("discord.js").TextChannel;
+          if (wc.channel.mode === "embed") {
+            const embed = buildWelcomerEmbed(wc.channel.embed ?? {}, user, guild, count);
+            if (wc.channel.embed?.showAvatar !== false) embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
+            await textCh.send({ embeds: [embed] });
+          } else if (wc.channel.mode === "image") {
+            const buf = await generateWelcomeImage({
+              avatarUrl: user.displayAvatarURL({ extension: "png", size: 256 }),
+              username: user.username,
+              memberCount: count,
+              serverName: guild.name,
+              background: wc.channel.imageBackground,
+            });
+            const att = new AttachmentBuilder(buf, { name: "welcome.png" });
+            await textCh.send({ files: [att] });
+          } else {
+            const text = applyWelcomerPlaceholders(wc.channel.message ?? "Welcome {user} to **{server}**!", user, guild, count);
+            await textCh.send({ content: text });
+          }
+        }
+      }
+
+      // DM welcome
+      if (wc.dm.enabled) {
+        if (wc.dm.mode === "embed") {
+          const embed = buildWelcomerEmbed(wc.dm.embed ?? {}, user, guild, count);
+          await user.send({ embeds: [embed] }).catch(() => {});
+        } else {
+          const text = applyWelcomerPlaceholders(wc.dm.message ?? "Welcome to **{server}**, {username}!", user, guild, count);
+          await user.send({ content: text }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling welcomer");
+    }
   });
 
   // ────────────────────────────────────────────────────────────────────

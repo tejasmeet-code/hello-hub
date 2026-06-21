@@ -22,7 +22,7 @@ function modActionError(err: unknown): string {
     return "This server requires **2FA for moderation actions**. The bot owner must enable Two-Factor Authentication on their Discord account (User Settings → My Account → Two-Factor Auth) to use mod commands here.";
   }
   if (code === 50013) {
-    return "I'm **missing permissions**. Make sure my role has **Moderate Members** and is above the target's highest role.";
+    return "Discord rejected this action (Missing Permissions). This can happen if the target has **Administrator**, is a bot, or Discord's role cache is out of sync. Try kicking and re-inviting the bot, or double-check the target's permissions.";
   }
   const msg = err instanceof Error ? err.message : String(err);
   return `Could not perform this action.\n\`${msg.slice(0, 300)}\``;
@@ -124,6 +124,12 @@ const command: SlashCommand = {
       return;
     }
 
+    // Bots cannot be timed out
+    if (member.user.bot) {
+      await interaction.editReply({ content: "Bots cannot be timed out." });
+      return;
+    }
+
     // Explicit check: target must not be owner AND bot must outrank target
     if (member.user.id === interaction.guild.ownerId) {
       await interaction.editReply({ content: "I can't mute the server owner." });
@@ -131,6 +137,15 @@ const command: SlashCommand = {
     }
     if (botMember.roles.highest.position <= member.roles.highest.position) {
       await interaction.editReply({ content: "I can't mute that user — they're at or above my highest role." });
+      return;
+    }
+
+    // Discord's own moderatable check (catches Administrator, edge cases, etc.)
+    if (!member.moderatable) {
+      await interaction.editReply({
+        content:
+          "Discord says I cannot moderate that user. Common reasons: they have **Administrator** permission, they are server owner, or my role is below theirs. Fix the role hierarchy and try again.",
+      });
       return;
     }
 
