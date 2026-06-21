@@ -76,7 +76,6 @@ const command: SlashCommand = {
           color: COLORS.success,
           footer: caseNumber ? `Case #${caseNumber}` : "Unmute recorded",
         })],
-        ephemeral: true,
       });
 
       const modChannelId = cfg.channels.moderation;
@@ -98,7 +97,7 @@ const command: SlashCommand = {
         }
       }
     } catch {
-      await interaction.reply({ content: "Failed to unmute that user.", ephemeral: true });
+      await interaction.reply({ content: "Failed to unmute that user." });
     }
   },
 };

@@ -11,9 +11,22 @@ import { CE, COLORS, prettyEmbed, buildBullets, errorEmbed } from "../utils/embe
 import { getGuildConfig, getModerationConfig } from "../storage/config";
 import { logger } from "../../lib/logger";
 import { createCase } from "../storage/cases";
+
 import { recordModStat } from "../storage/modstats";
 import { bumpModAction } from "../storage/quota";
 import { sendPunishmentDM } from "../utils/punishDM";
+
+function modActionError(err: unknown): string {
+  const code = (err as any)?.code;
+  if (code === 40002) {
+    return "This server requires **2FA for moderation actions**. The bot owner must enable Two-Factor Authentication on their Discord account (User Settings → My Account → Two-Factor Auth) to use mod commands here.";
+  }
+  if (code === 50013) {
+    return "I'm **missing permissions**. Make sure my role has **Moderate Members** and is above the target's highest role.";
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return `Could not perform this action.\n\`${msg.slice(0, 300)}\``;
+}
 
 const UNIT_MS: Record<string, number> = {
   s: 1_000,
@@ -93,10 +106,10 @@ const command: SlashCommand = {
     }
 
     // Defer before async API calls to avoid the 3-second Discord timeout
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     // Always fetch fresh — stale guild.members.me cache causes false-positive moderatable checks
-    const botMember = await interaction.guild.members.fetchMe().catch(() => interaction.guild.members.me);
+    const botMember = await interaction.guild.members.fetchMe().catch(() => interaction.guild?.members.me);
     if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       await interaction.editReply({ content: `${CE.error.str} I don't have the **Moderate Members** permission. Grant it and try again.` });
       return;
@@ -192,9 +205,8 @@ const command: SlashCommand = {
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       logger.error({ err, guildId: interaction.guildId, targetId: target.id }, "mute: timeout() failed");
-      await interaction.editReply({ embeds: [errorEmbed("Failed", `Could not mute that user.\n\`${msg.slice(0, 200)}\``)] });
+      await interaction.editReply({ embeds: [errorEmbed("Failed", modActionError(err))] });
     }
   },
 };

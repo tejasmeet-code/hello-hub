@@ -79,7 +79,7 @@ export function defaultAutomodConfig(): AutomodConfig {
     mentions: { ...baseRule, threshold: 5 },
     duplicates: { ...baseRule, windowSeconds: 30 },
     newlines: { ...baseRule, threshold: 10 },
-    aiAutomod: { ...baseRule, whitelist: [], categories: ["threat","hate_speech","slur"], minConfidence: 75 },
+    aiAutomod: { ...baseRule, whitelist: [], categories: ["threat","hate_speech","slur","explicit","harassment","self_harm"], minConfidence: 75 },
   };
 }
 

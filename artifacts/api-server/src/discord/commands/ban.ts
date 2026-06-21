@@ -12,8 +12,22 @@ import { getGuildConfig, getModerationConfig } from "../storage/config";
 import { sendPunishmentDM } from "../utils/punishDM";
 import { buildBullets, CE, COLORS, prettyEmbed, errorEmbed } from "../utils/embedStyle";
 import { recordModStat } from "../storage/modstats";
+import { logger } from "../../lib/logger";
+
 import { bumpModAction } from "../storage/quota";
 import { propagatePunishment, formatPropagationResults } from "../utils/crossServer";
+
+function modActionError(err: unknown): string {
+  const code = (err as any)?.code;
+  if (code === 40002) {
+    return "This server requires **2FA for moderation actions**. The bot owner must enable Two-Factor Authentication on their Discord account (User Settings → My Account → Two-Factor Auth) to use mod commands here.";
+  }
+  if (code === 50013) {
+    return "I'm **missing permissions**. Make sure my role has **Ban Members** and is above the target's highest role.";
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return `Could not perform this action.\n\`${msg.slice(0, 300)}\``;
+}
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -74,10 +88,10 @@ const command: SlashCommand = {
     }
 
     // Defer before async API calls to avoid the 3-second Discord timeout
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     // Always fetch fresh — stale guild.members.me cache causes false-positive bannable checks
-    const botMember = await interaction.guild.members.fetchMe().catch(() => interaction.guild.members.me);
+    const botMember = await interaction.guild.members.fetchMe().catch(() => interaction.guild?.members.me);
     if (!botMember || !botMember.permissions.has(PermissionFlagsBits.BanMembers)) {
       await interaction.editReply({ content: `${CE.error.str} I don't have the **Ban Members** permission. Grant it and try again.` });
       return;
@@ -187,9 +201,8 @@ const command: SlashCommand = {
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       logger.error({ err, guildId: interaction.guildId, targetId: target.id }, "ban: ban() failed");
-      await interaction.editReply({ embeds: [errorEmbed("Failed", `Could not ban that user.\n\`${msg.slice(0, 200)}\``)] });
+      await interaction.editReply({ embeds: [errorEmbed("Failed", modActionError(err))] });
     }
   },
 };

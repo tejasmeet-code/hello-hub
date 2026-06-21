@@ -26,7 +26,7 @@ const command: SlashCommand = {
   async execute(interaction: ChatInputCommandInteraction) {
     if (!(await ensureWhitelisted(interaction, "kick"))) return;
     if (!interaction.guild || !interaction.guildId) return;
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const target = interaction.options.getUser("user", true);
     const reason = interaction.options.getString("reason", true);

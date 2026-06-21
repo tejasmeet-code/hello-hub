@@ -26,54 +26,91 @@ export interface AiAutomodResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pattern tables  (kept intentionally vague so the file is safe to host)
+// Pattern tables
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Regex-based threat patterns — language agnostic */
+/** Regex-based threat patterns */
 const THREAT_REGEXES: RegExp[] = [
   /i('ll|m going to|will)\s+(kill|murder|hurt|attack|stab|shoot|bomb|destroy)\s+(you|u|him|her|them)/i,
   /\b(kill\s*your\s*self|kys)\b/i,
   /\b(i('ll| will) (find|locate) (you|u|where you live))\b/i,
   /\b(swat(ting)?|dox(x)?ing|leak(ing)? (your|ur) (ip|address|location|info))\b/i,
   /\b(bomb\s*threat|school\s*shooting|mass\s*shooting)\b/i,
+  /gonna\s+(kill|murder|hurt|stab|shoot)\s+(you|u|him|her|them)/i,
+  /\b(i will (end|destroy) you)\b/i,
+  /\b(watch your back)\b/i,
 ];
 
 /** Self-harm patterns */
 const SELF_HARM_REGEXES: RegExp[] = [
   /\b(want\s*to\s*(die|end\s*it|kill\s*myself|suicide))\b/i,
   /\b(how\s*to\s*(kill\s*yourself|commit\s*suicide|overdose))\b/i,
+  /\b(cutting\s*myself|self\s*harm)\b/i,
 ];
 
-/** Explicit sexual content patterns */
+/**
+ * Explicit profanity patterns — checked on normalised text.
+ * No word boundaries: profanity can be embedded inside other text.
+ */
 const EXPLICIT_REGEXES: RegExp[] = [
-  /\b(c[0o]ck|d[i1]ck|p[u\*]ssy|f[u\*]ck(ing)?|sh[i1]t|c[u\*]nt)\b/i,
+  // Common profanity (covers raw + l33t + asterisk obfuscation after normalise)
+  /f[u*]c?k(ing|er|ers|ed|s)?/i,
+  /sh[i*]t(ty|ter|s|face)?/i,
+  /[a@]ss(hole|hat|wipe|face|clown|head|s)?/i,
+  /b[i*]tch(es|y|ing|ass)?/i,
+  /c[o0u*]ck(sucker|s)?/i,
+  /d[i*1]ck(head|s|face)?/i,
+  /p[u*]ss[yi](es)?/i,
+  /c[u*]nt(s|y)?/i,
+  /wh[o0]re(s|y)?/i,
+  /sl[u*]t(s|ty)?/i,
+  /b[a@]st[a@]rd/i,
+  /m[o0]th[e3]r\s*f[u*]c?k/i,
+  /cr[a@]p(py|s)?/i,
+  /[a@]ss\s*f[u*]c?k/i,
 ];
 
 /** Hate speech patterns — ideological hostility targeting protected groups */
 const HATE_SPEECH_REGEXES: RegExp[] = [
-  /(i\s*hate\s*(all\s*)?(black|white|jewish|muslim|gay|trans|asian|hispanic|latino|arab)\s*(people|persons|men|women|community))/i,
-  /(all\s*(jews|blacks|muslims|gays|trans|asians|hispanics)\s*(should|deserve|must|need\s*to)\s*(die|be\s*(killed|banned|deported|eliminated)))/i,
-  /(white\s*supremac|ethnic\s*cleansing|racial\s*purity|race\s*war|master\s*race|sub[\s-]?human)/i,
-  /(death\s*to\s*(all\s*)?(jews|muslims|blacks|gays|trans|christians))/i,
-  /(gas\s*the|send\s*them\s*back|replace\s*the\s*whites|great\s*replacement)/i,
+  /(i\s*hate\s*(all\s*)?(black|white|jewish|muslim|gay|trans|asian|hispanic|latino|arab)\s*(people|persons|men|women|community))/i,
+  /(all\s*(jews|blacks|muslims|gays|trans|asians|hispanics)\s*(should|deserve|must|need\s*to)\s*(die|be\s*(killed|banned|deported|eliminated)))/i,
+  /(white\s*supremac|ethnic\s*cleansing|racial\s*purity|race\s*war|master\s*race|sub[\s-]?human)/i,
+  /(death\s*to\s*(all\s*)?(jews|muslims|blacks|gays|trans|christians))/i,
+  /(gas\s*the|send\s*them\s*back|replace\s*the\s*whites|great\s*replacement)/i,
 ];
 
 /** Harassment patterns */
 const HARASSMENT_REGEXES: RegExp[] = [
-  /\b(you('re|\s*are)\s*(worthless|pathetic|garbage|trash|disgusting|a\s*(loser|idiot|moron|retard)))\b/i,
-  /\b(no\s*one\s*(likes|wants)\s*you)\b/i,
+  /\b(you('re|\s*are)\s*(worthless|pathetic|garbage|trash|disgusting|a\s*(loser|idiot|moron|retard|waste)))\b/i,
+  /\b(no\s*one\s*(likes|wants|cares\s*about)\s*you)\b/i,
   /\b(go\s*(die|kill\s*yourself|away\s*forever))\b/i,
+  /\b(you\s*should\s*(die|not\s*exist|kill\s*yourself))\b/i,
+  /\b(nobody\s*(loves|likes|wants)\s*you)\b/i,
 ];
 
-// Curated slur stems — we normalise l33t speak before checking
-// (List intentionally minimal; admins add domain-specific words via config)
+// Curated slur stems — normalise l33t speak before checking
 const SLUR_STEMS: string[] = [
-  "n1gg", "nigg", "f4gg", "fagg", "ch1nk", "chink",
-  "sp1c", "spic", "k1ke", "kike", "tr4nn", "trann",
+  "nigg", "n1gg",
+  "fagg", "f4gg",
+  "chink", "ch1nk",
+  "spic", "sp1c",
+  "kike", "k1ke",
+  "trann", "tr4nn",
+  "wetbac",
+  "beaner",
+  "towelhead",
+  "sandnig",
+  "gooks",
+  "cracker",
+  "honkey",
+  "coon",
+  "porch",
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Normaliser — collapse l33t speak so filters can't be bypassed easily
+// Note: asterisks (*) are intentionally NOT stripped so patterns like
+// f*ck / sh*t remain detectable via the explicit regex character classes.
 // ─────────────────────────────────────────────────────────────────────────────
 function normalise(text: string): string {
   return text
@@ -87,8 +124,8 @@ function normalise(text: string): string {
     .replace(/8/g, "b")
     .replace(/\$/g, "s")
     .replace(/[@]/g, "a")
-    .replace(/[*\-.]/g, "")    // strip common obfuscation chars
-    .replace(/(.)\1{2,}/g, "$1$1"); // collapse repeated chars (fuuuuck → fuuck)
+    .replace(/[-\\.]/g, "")          // strip hyphens and dots (NOT asterisks)
+    .replace(/(.)\1{2,}/g, "$1$1");  // collapse 3+ repeated chars (fuuuuck → fuuck)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,10 +182,10 @@ export function classifyContent(
     }
   }
 
-  // Layer 6 — Explicit
+  // Layer 6 — Explicit profanity
   for (const re of EXPLICIT_REGEXES) {
     if (re.test(analysed)) {
-      return { flagged: true, category: "explicit", confidence: 75, matchedPattern: "explicit_pattern" };
+      return { flagged: true, category: "explicit", confidence: 78, matchedPattern: "explicit_pattern" };
     }
   }
 

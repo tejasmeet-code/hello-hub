@@ -44,13 +44,13 @@ const command: SlashCommand = {
       return;
     }
 
-    const ok = await isAdminOrOwner(interaction.member as any, interaction.guild);
+    const ok = isAdminOrOwner(interaction);
     if (!ok) {
       await interaction.reply({ content: `${CE.error.str} You need **Manage Server** or admin permissions.`, ephemeral: true });
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     const lc = await getLevelConfig(interaction.guildId);
     if (!lc.enabled) {

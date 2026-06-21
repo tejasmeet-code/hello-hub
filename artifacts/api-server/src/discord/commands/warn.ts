@@ -178,7 +178,7 @@ const command: SlashCommand = {
             .join("\n\n"),
         footer: `${warnings.length} total warning${warnings.length === 1 ? "" : "s"}`,
       });
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed] });
       return;
     }
 
