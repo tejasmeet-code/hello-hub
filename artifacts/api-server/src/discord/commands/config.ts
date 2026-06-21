@@ -2037,6 +2037,10 @@ function antiNukeGlobalWLRows(): Row[] {
 
 function buildTicketsOverviewEmbed(tc: TicketsModuleConfig): EmbedBuilder {
   const panelList = Object.values(tc.panels);
+  const mp = tc.multiPanel;
+  const mpValue = mp
+    ? `${mp.panelIds.length} panels · ${mp.useButtons ? "Buttons" : "Dropdown"} · ${mp.channelId ? `<#${mp.channelId}>` : "no channel"}`
+    : "*Not configured*";
   return new EmbedBuilder()
     .setTitle(`${CE.ticket.str} Tickets Module`)
     .setColor(tc.enabled ? 0x57f287 : 0xed4245)
@@ -2047,6 +2051,7 @@ function buildTicketsOverviewEmbed(tc: TicketsModuleConfig): EmbedBuilder {
       { name: "Admin Role", value: tc.adminRoleId ? `<@&${tc.adminRoleId}>` : "*Not set*", inline: true },
       { name: "Log Channel", value: tc.logChannelId ? `<#${tc.logChannelId}>` : "*Not set*", inline: true },
       { name: "Transcript Channel", value: tc.transcriptChannelId ? `<#${tc.transcriptChannelId}>` : "*Not set*", inline: true },
+      { name: "Multi-Panel", value: mpValue, inline: false },
       { name: `${CE.clipboard.str} Panels`, value: panelList.length > 0 ? panelList.map((p) => `• **${p.name}** — \`${p.buttonLabel}\``).join("\n") : "*No panels yet.*", inline: false },
     )
     .setFooter({ text: "Ticket numbering: {panel-name}-001, 002, ..." });
@@ -2057,6 +2062,7 @@ function ticketsOverviewRows(tc: TicketsModuleConfig): Row[] {
   rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder().setCustomId("cfg:tickets:toggle").setLabel(tc.enabled ? "Enabled — Click to Disable" : "Disabled — Click to Enable").setStyle(tc.enabled ? ButtonStyle.Success : ButtonStyle.Danger),
     new ButtonBuilder().setCustomId("cfg:tickets:addPanel").setLabel("Add Panel").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.ticket.id, name: CE.ticket.name, animated: CE.ticket.animated }),
+    new ButtonBuilder().setCustomId("cfg:tickets:multiPanel").setLabel(tc.multiPanel ? "Edit Multi-Panel" : "Multi-Panel").setStyle(ButtonStyle.Secondary).setEmoji("📋"),
   ));
   rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder().setCustomId("cfg:tickets:setSupportRole").setLabel("Set Support Role").setStyle(ButtonStyle.Secondary).setEmoji({ id: CE.members.id, name: CE.members.name, animated: CE.members.animated }),
@@ -2073,6 +2079,71 @@ function ticketsOverviewRows(tc: TicketsModuleConfig): Row[] {
     ));
   }
   rows.push(backRow());
+  return rows;
+}
+
+function buildMultiPanelEmbed(tc: TicketsModuleConfig): EmbedBuilder {
+  const mp = tc.multiPanel;
+  if (!mp) {
+    return new EmbedBuilder()
+      .setTitle("📋 Multi-Panel")
+      .setColor(0x5865f2)
+      .setDescription("No multi-panel configured yet.\n\nA multi-panel groups multiple ticket panels into **one embed**, displayed as **buttons** or a **dropdown menu**. Users pick a category and the matching ticket opens.");
+  }
+  const panels = Object.values(tc.panels);
+  const includedNames = mp.panelIds.map((id) => panels.find((p) => p.id === id)?.name ?? id);
+  return new EmbedBuilder()
+    .setTitle("📋 Multi-Panel Config")
+    .setColor(0x5865f2)
+    .addFields(
+      { name: "Embed Title", value: mp.embedTitle || "*Not set*", inline: true },
+      { name: "Display Style", value: mp.useButtons ? "🔘 Buttons" : "📑 Dropdown", inline: true },
+      { name: "Channel", value: mp.channelId ? `<#${mp.channelId}>` : "*Not set*", inline: true },
+      { name: `Included Panels (${mp.panelIds.length})`, value: includedNames.length > 0 ? includedNames.map((n) => `• ${n}`).join("\n") : "*None selected — use the dropdown below*", inline: false },
+      { name: "Embed Description", value: mp.embedDescription || "*Not set*", inline: false },
+    )
+    .setFooter({ text: mp.messageId ? "Posted — use Re-Post to apply changes" : "Not posted yet" });
+}
+
+function multiPanelRows(tc: TicketsModuleConfig): Row[] {
+  const mp = tc.multiPanel;
+  const panelList = Object.values(tc.panels);
+  const rows: Row[] = [];
+  if (!mp) {
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("cfg:tickets:multiPanel:create").setLabel("Create Multi-Panel").setStyle(ButtonStyle.Success).setEmoji("📋"),
+    ));
+  } else {
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("cfg:tickets:multiPanel:editEmbed").setLabel("Edit Embed").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.information.id, name: CE.information.name, animated: CE.information.animated }),
+      new ButtonBuilder().setCustomId("cfg:tickets:multiPanel:toggleStyle").setLabel(mp.useButtons ? "Switch to Dropdown" : "Switch to Buttons").setStyle(ButtonStyle.Secondary).setEmoji(mp.useButtons ? "📑" : "🔘"),
+      new ButtonBuilder().setCustomId("cfg:tickets:multiPanel:setChannel").setLabel(mp.channelId ? "Change Channel" : "Set Channel").setStyle(ButtonStyle.Secondary).setEmoji({ id: CE.announce.id, name: CE.announce.name, animated: CE.announce.animated }),
+    ));
+    if (panelList.length > 0) {
+      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("cfg:tickets:multiPanel:setPanelsRes")
+          .setPlaceholder("Pick panels to include in the multi-panel…")
+          .setMinValues(1)
+          .setMaxValues(Math.min(panelList.length, 25))
+          .addOptions(
+            panelList.slice(0, 25).map((p) => ({
+              label: p.buttonLabel.slice(0, 25),
+              value: p.id,
+              description: `Panel: ${p.name.slice(0, 50)}`,
+              default: mp.panelIds.includes(p.id),
+            })),
+          ),
+      ));
+    }
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("cfg:tickets:multiPanel:post").setLabel(mp.messageId ? "Re-Post Multi-Panel" : "Post Multi-Panel").setStyle(ButtonStyle.Success).setEmoji({ id: CE.success.id, name: CE.success.name, animated: CE.success.animated }),
+      new ButtonBuilder().setCustomId("cfg:tickets:multiPanel:delete").setLabel("Delete Multi-Panel").setStyle(ButtonStyle.Danger).setEmoji({ id: CE.trash.id, name: CE.trash.name, animated: CE.trash.animated }),
+    ));
+  }
+  rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+    new ButtonBuilder().setCustomId("cfg:tickets:overview").setLabel("← Back to Tickets").setStyle(ButtonStyle.Secondary),
+  ));
   return rows;
 }
 
@@ -2689,6 +2760,172 @@ const command: SlashCommand = {
         if (id.startsWith("cfg:tickets:panel:delete:")) {
           const panelId = id.slice("cfg:tickets:panel:delete:".length);
           const tc = await updateTicketsConfig(guildId, (c) => { const panels = { ...c.panels }; delete panels[panelId]; return { ...c, panels }; });
+          await safeUpdate(i, { embeds: [buildTicketsOverviewEmbed(tc)], components: ticketsOverviewRows(tc) });
+          return;
+        }
+
+        // ── Multi-panel management ────────────────────────────────────────────
+        if (id === "cfg:tickets:multiPanel") {
+          const tc = await getTicketsConfig(guildId);
+          await safeUpdate(i, { embeds: [buildMultiPanelEmbed(tc)], components: multiPanelRows(tc) });
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:create") {
+          const modal = new ModalBuilder().setCustomId("cfg:tickets:multiPanel:createModal").setTitle("Create Multi-Panel").addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("embedTitle").setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setPlaceholder("Open a Ticket"),
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("embedDescription").setLabel("Embed Description").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(2000).setPlaceholder("Choose a category below to open a support ticket."),
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("useButtons").setLabel('Display style: "buttons" or "dropdown"').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(8).setPlaceholder("buttons").setValue("buttons"),
+            ),
+          );
+          await i.showModal(modal);
+          try {
+            const submit = await i.awaitModalSubmit({ filter: (s) => s.customId === "cfg:tickets:multiPanel:createModal" && s.user.id === i.user.id, time: 5 * 60 * 1000 });
+            const rawStyle = submit.fields.getTextInputValue("useButtons").trim().toLowerCase();
+            const newMp: import("../storage/tickets").MultiPanelConfig = {
+              panelIds: [],
+              embedTitle: submit.fields.getTextInputValue("embedTitle"),
+              embedDescription: submit.fields.getTextInputValue("embedDescription"),
+              useButtons: rawStyle !== "dropdown",
+            };
+            const updatedTc = await updateTicketsConfig(guildId, (c) => ({ ...c, multiPanel: newMp }));
+            if (submit.isFromMessage()) {
+              await safeSubmitUpdate(submit, { embeds: [buildMultiPanelEmbed(updatedTc)], components: multiPanelRows(updatedTc) });
+            } else {
+              await submit.reply({ content: "Multi-panel created! Now select panels to include.", flags: 1 << 6 });
+            }
+          } catch { /* dismissed */ }
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:editEmbed") {
+          const tc = await getTicketsConfig(guildId);
+          const mp = tc.multiPanel; if (!mp) return;
+          const modal = new ModalBuilder().setCustomId("cfg:tickets:multiPanel:editModal").setTitle("Edit Multi-Panel Embed").addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("embedTitle").setLabel("Embed Title").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(mp.embedTitle),
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("embedDescription").setLabel("Embed Description").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(2000).setValue(mp.embedDescription || ""),
+            ),
+          );
+          await i.showModal(modal);
+          try {
+            const submit = await i.awaitModalSubmit({ filter: (s) => s.customId === "cfg:tickets:multiPanel:editModal" && s.user.id === i.user.id, time: 5 * 60 * 1000 });
+            const updatedTc = await updateTicketsConfig(guildId, (c) => ({
+              ...c,
+              multiPanel: c.multiPanel ? { ...c.multiPanel, embedTitle: submit.fields.getTextInputValue("embedTitle"), embedDescription: submit.fields.getTextInputValue("embedDescription") } : c.multiPanel,
+            }));
+            if (submit.isFromMessage()) { await safeSubmitUpdate(submit, { embeds: [buildMultiPanelEmbed(updatedTc)], components: multiPanelRows(updatedTc) }); }
+            else { await submit.reply({ content: "Embed updated!", flags: 1 << 6 }); }
+          } catch { /* dismissed */ }
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:toggleStyle") {
+          const tc = await updateTicketsConfig(guildId, (c) => ({
+            ...c, multiPanel: c.multiPanel ? { ...c.multiPanel, useButtons: !c.multiPanel.useButtons } : c.multiPanel,
+          }));
+          await safeUpdate(i, { embeds: [buildMultiPanelEmbed(tc)], components: multiPanelRows(tc) });
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:setPanelsRes" && i.isStringSelectMenu()) {
+          const tc = await updateTicketsConfig(guildId, (c) => ({
+            ...c, multiPanel: c.multiPanel ? { ...c.multiPanel, panelIds: i.values } : c.multiPanel,
+          }));
+          await safeUpdate(i, { embeds: [buildMultiPanelEmbed(tc)], components: multiPanelRows(tc) });
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:setChannel") {
+          await safeUpdate(i, {
+            embeds: [new EmbedBuilder().setTitle("Set Multi-Panel Channel").setDescription("Select which channel the multi-panel embed will be posted in.").setColor(0x5865f2)],
+            components: [
+              new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:tickets:multiPanel:channelRes").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select channel")),
+              new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId("cfg:tickets:multiPanel").setLabel("← Back").setStyle(ButtonStyle.Secondary)),
+            ],
+          });
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:channelRes" && i.isChannelSelectMenu()) {
+          const tc = await updateTicketsConfig(guildId, (c) => ({
+            ...c, multiPanel: c.multiPanel ? { ...c.multiPanel, channelId: i.values[0] } : c.multiPanel,
+          }));
+          await safeUpdate(i, { embeds: [buildMultiPanelEmbed(tc)], components: multiPanelRows(tc) });
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:post") {
+          const tc = await getTicketsConfig(guildId);
+          const mp = tc.multiPanel;
+          if (!mp) { await i.reply({ content: "No multi-panel configured.", flags: 1 << 6 }); return; }
+          if (mp.panelIds.length === 0) { await i.reply({ content: "Add at least one panel to the multi-panel first.", flags: 1 << 6 }); return; }
+          if (!mp.channelId) { await i.reply({ content: "Set a channel first.", flags: 1 << 6 }); return; }
+          if (!i.guild) { await i.reply({ content: "Guild not found.", flags: 1 << 6 }); return; }
+          const postCh = i.guild.channels.cache.get(mp.channelId) as any;
+          if (!postCh?.send) { await i.reply({ content: "Channel not found or not accessible.", flags: 1 << 6 }); return; }
+
+          // Delete old message if re-posting
+          if (mp.messageId) {
+            await postCh.messages.fetch(mp.messageId).then((m: any) => m.delete()).catch(() => {});
+          }
+
+          const panelEmbed = new EmbedBuilder().setTitle(mp.embedTitle).setDescription(mp.embedDescription || null).setColor(0x5865f2);
+          const includedPanels = mp.panelIds.map((pid) => tc.panels[pid]).filter(Boolean) as TicketPanel[];
+
+          let msgComponents: any[];
+          if (mp.useButtons) {
+            const btnRows: any[] = [];
+            for (let b = 0; b < includedPanels.length; b += 5) {
+              const chunk = includedPanels.slice(b, b + 5);
+              btnRows.push(new ActionRowBuilder().addComponents(
+                chunk.map((p) => {
+                  const btn = new ButtonBuilder()
+                    .setCustomId(`ticket:open:${p.id}:${guildId}`)
+                    .setLabel(p.buttonLabel)
+                    .setStyle(ButtonStyle.Primary);
+                  if (p.buttonEmoji) {
+                    const cm = p.buttonEmoji.match(/^<a?:(\w+):(\d+)>$/);
+                    if (cm) btn.setEmoji({ name: cm[1]!, id: cm[2]! }); else btn.setEmoji(p.buttonEmoji);
+                  }
+                  return btn;
+                }),
+              ));
+            }
+            msgComponents = btnRows;
+          } else {
+            const select = new StringSelectMenuBuilder()
+              .setCustomId(`ticket:multipanel:select:${guildId}`)
+              .setPlaceholder("Choose a ticket category…")
+              .addOptions(
+                includedPanels.map((p) => ({
+                  label: p.buttonLabel.slice(0, 25),
+                  value: p.id,
+                  description: p.name.slice(0, 50),
+                })),
+              );
+            msgComponents = [new ActionRowBuilder().addComponents(select)];
+          }
+
+          const msg = await postCh.send({ embeds: [panelEmbed], components: msgComponents }).catch(() => null);
+          if (!msg) { await i.reply({ content: "Failed to post. Check my permissions.", flags: 1 << 6 }); return; }
+
+          const updatedTc = await updateTicketsConfig(guildId, (c) => ({
+            ...c, multiPanel: c.multiPanel ? { ...c.multiPanel, messageId: msg.id } : c.multiPanel,
+          }));
+          await safeUpdate(i, { embeds: [buildMultiPanelEmbed(updatedTc)], components: multiPanelRows(updatedTc) });
+          return;
+        }
+
+        if (id === "cfg:tickets:multiPanel:delete") {
+          const tc = await updateTicketsConfig(guildId, (c) => ({ ...c, multiPanel: undefined }));
           await safeUpdate(i, { embeds: [buildTicketsOverviewEmbed(tc)], components: ticketsOverviewRows(tc) });
           return;
         }

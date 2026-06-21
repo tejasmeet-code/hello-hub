@@ -514,6 +514,90 @@ export async function startDiscordBot(): Promise<void> {
       return;
     }
 
+    // Handle dropdown multi-panel selection
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("ticket:multipanel:select:")) {
+      const guildId = interaction.customId.split(":")[3];
+      if (!guildId || !interaction.guild || !interaction.guildId) {
+        await interaction.reply({ content: "Could not process selection.", flags: 1 << 6 }).catch(() => {}); return;
+      }
+      const panelId = interaction.values[0];
+      if (!panelId) { await interaction.reply({ content: "No panel selected.", flags: 1 << 6 }); return; }
+      try {
+        const tc = await getTicketsConfig(guildId);
+        if (!tc.enabled) { await interaction.reply({ content: "The ticket system is currently disabled.", flags: 1 << 6 }); return; }
+        const panel = tc.panels[panelId];
+        if (!panel) { await interaction.reply({ content: "That ticket panel no longer exists.", flags: 1 << 6 }); return; }
+        const existing = await getOpenTicketsByUser(guildId, interaction.user.id, panelId);
+        if (existing.length > 0) {
+          const ch = interaction.guild.channels.cache.get(existing[0]!.channelId);
+          await interaction.reply({ content: ch ? `You already have an open ticket: ${ch}` : "You already have an open ticket.", flags: 1 << 6 }); return;
+        }
+
+        // If panel has questions, show modal
+        if (panel.questions && panel.questions.length > 0) {
+          const { ModalBuilder, ActionRowBuilder: MARB, TextInputBuilder, TextInputStyle } = await import("discord.js");
+          const modal = new ModalBuilder()
+            .setCustomId(`ticket:questions:${panelId}:${guildId}`)
+            .setTitle(panel.embedTitle?.slice(0, 45) || "Open a Ticket");
+          for (const [idx, q] of panel.questions.slice(0, 5).entries()) {
+            modal.addComponents((new MARB() as any).addComponents(
+              new TextInputBuilder()
+                .setCustomId(`q${idx}`)
+                .setLabel(q.label.slice(0, 45))
+                .setStyle(q.style === "paragraph" ? TextInputStyle.Paragraph : TextInputStyle.Short)
+                .setRequired(q.required),
+            ));
+          }
+          await interaction.showModal(modal);
+          return;
+        }
+
+        // No questions — defer and create immediately
+        await interaction.deferReply({ flags: 1 << 6 });
+        const supportRoleId = panel.supportRoleId ?? tc.supportRoleId;
+        const { ChannelType: CT, PermissionFlagsBits: PFB, EmbedBuilder: EB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = await import("discord.js");
+        const num = await getNextTicketNumber(guildId, panelId);
+        const ticketId = `${panel.name}-${String(num).padStart(3, "0")}`;
+        const botMe = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
+        if (!botMe) { await interaction.editReply("Could not resolve my member object — please try again."); return; }
+        const overwrites: any[] = [
+          { id: interaction.guild.id, deny: [PFB.ViewChannel] },
+          { id: interaction.user.id, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] },
+          { id: botMe.id, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ManageChannels, PFB.ReadMessageHistory] },
+        ];
+        if (supportRoleId) overwrites.push({ id: supportRoleId, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] });
+        if (tc.adminRoleId) overwrites.push({ id: tc.adminRoleId, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] });
+        const channel = await interaction.guild.channels.create({
+          name: ticketId, type: CT.GuildText, parent: panel.categoryId ?? undefined, permissionOverwrites: overwrites, reason: `Ticket by ${interaction.user.tag}`,
+        });
+        await createOpenTicket({ ticketId, panelId, channelId: channel.id, guildId, userId: interaction.user.id, createdAt: Date.now(), status: "open" });
+        const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x5865f2)
+          .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
+          .setFooter({ text: "Use the buttons below to manage this ticket." }).setTimestamp();
+        const ticketRow = new ARB().addComponents(
+          new BB().setCustomId(`ticket:claim:${channel.id}:${guildId}`).setLabel("Claim").setStyle(BS.Primary).setEmoji("🙋"),
+          new BB().setCustomId(`ticket:close:${channel.id}:${guildId}`).setLabel("Close Ticket").setStyle(BS.Danger).setEmoji({ id: CE.locked.id, name: CE.locked.name }),
+        );
+        const ping = supportRoleId ? `<@&${supportRoleId}>` : "";
+        await channel.send({ content: `${ping} ${interaction.user}`.trim(), embeds: [welcomeEmbed], components: [ticketRow as any] });
+        if (tc.logChannelId) {
+          const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
+          if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x57f287).setTitle("Ticket Opened")
+            .addFields({ name: "Ticket", value: `${channel} (\`${ticketId}\`)`, inline: true }, { name: "Opened by", value: `<@${interaction.user.id}>`, inline: true }, { name: "Panel", value: panel.name, inline: true })
+            .setTimestamp()] }).catch(() => {});
+        }
+        await interaction.editReply(`Your ticket has been created: ${channel}`);
+      } catch (err) {
+        logger.error({ err }, "Error handling ticket:multipanel:select");
+        if ((interaction as any).deferred || (interaction as any).replied) {
+          await (interaction as any).editReply("Failed to create ticket.").catch(() => {});
+        } else {
+          await interaction.reply({ content: "Failed to create ticket. Check my permissions.", flags: 1 << 6 }).catch(() => {});
+        }
+      }
+      return;
+    }
+
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith("appeal:submit:")) {
         const { handleAppealModalSubmit } = await import("./utils/appealHandler");
