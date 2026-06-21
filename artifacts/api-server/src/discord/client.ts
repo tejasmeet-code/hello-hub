@@ -14,7 +14,7 @@ import { getGuildConfig } from "./storage/config";
 import { listStaffRoles } from "./storage/staff";
 import { bumpMessage } from "./storage/quota";
 
-import { getTicketsConfig, createOpenTicket, closeOpenTicket, getOpenTicketsByUser, getOpenTicketByChannel, getNextTicketNumber } from "./storage/tickets";
+import { getTicketsConfig, createOpenTicket, closeOpenTicket, claimTicket, getOpenTicketsByUser, getOpenTicketByChannel, getNextTicketNumber } from "./storage/tickets";
 import { getAutomodConfig, recordSpam, recordDuplicate } from "./storage/automod";
 import { getActiveGiveaways, updateGiveaway } from "./storage/giveaways";
 import { logDmToWebhook } from "./utils/dmWebhook";
@@ -334,10 +334,13 @@ export async function startDiscordBot(): Promise<void> {
           await createOpenTicket({ ticketId, panelId, channelId: channel.id, guildId, userId: interaction.user.id, createdAt: Date.now(), status: "open" });
           const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x5865f2)
             .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
-            .setFooter({ text: "Use the button below to close this ticket." }).setTimestamp();
-          const closeRow = new ARB().addComponents(new BB().setCustomId(`ticket:close:${channel.id}:${guildId}`).setLabel("Close Ticket").setStyle(BS.Danger).setEmoji({ id: CE.locked.id, name: CE.locked.name }));
+            .setFooter({ text: "Use the buttons below to manage this ticket." }).setTimestamp();
+          const ticketRow = new ARB().addComponents(
+            new BB().setCustomId(`ticket:claim:${channel.id}:${guildId}`).setLabel("Claim").setStyle(BS.Primary).setEmoji("🙋"),
+            new BB().setCustomId(`ticket:close:${channel.id}:${guildId}`).setLabel("Close Ticket").setStyle(BS.Danger).setEmoji({ id: CE.locked.id, name: CE.locked.name }),
+          );
           const ping = supportRoleId ? `<@&${supportRoleId}>` : "";
-          await channel.send({ content: `${ping} ${interaction.user}`.trim(), embeds: [welcomeEmbed], components: [closeRow as any] });
+          await channel.send({ content: `${ping} ${interaction.user}`.trim(), embeds: [welcomeEmbed], components: [ticketRow as any] });
           if (tc.logChannelId) {
             const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
             if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x57f287).setTitle("Ticket Opened")
@@ -348,6 +351,87 @@ export async function startDiscordBot(): Promise<void> {
         } catch (err) {
           logger.error({ err }, "Error handling ticket:open button");
           await interaction.editReply("Failed to create ticket. Check my permissions.").catch(() => {});
+        }
+      } else if (interaction.customId.startsWith("ticket:claim:")) {
+        // Format: ticket:claim:{channelId}:{guildId}
+        const parts = interaction.customId.split(":");
+        const channelId = parts[2];
+        const guildId = parts[3];
+        if (!channelId || !guildId || !interaction.guild || !interaction.guildId) {
+          await interaction.reply({ content: "Invalid claim button.", flags: 1 << 6 }).catch(() => {}); return;
+        }
+        await interaction.deferReply({ flags: 1 << 6 });
+        try {
+          const tc = await getTicketsConfig(guildId);
+          const ticket = await getOpenTicketByChannel(guildId, channelId);
+          if (!ticket) {
+            await interaction.editReply("This ticket no longer exists."); return;
+          }
+          if (ticket.claimedBy) {
+            await interaction.editReply(`This ticket is already claimed by <@${ticket.claimedBy}>.`); return;
+          }
+          const member = interaction.member as any;
+          const hasSupportRole = tc.supportRoleId && member?.roles?.cache?.has(tc.supportRoleId);
+          const hasAdminRole = tc.adminRoleId && member?.roles?.cache?.has(tc.adminRoleId);
+          const isAdmin = member?.permissions?.has?.("Administrator");
+          const isOwner = interaction.guild.ownerId === interaction.user.id;
+          if (!hasSupportRole && !hasAdminRole && !isAdmin && !isOwner) {
+            await interaction.editReply("Only support staff can claim tickets."); return;
+          }
+
+          const { PermissionFlagsBits: PFB, EmbedBuilder: EB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = await import("discord.js");
+          const ch = interaction.guild.channels.cache.get(channelId) as any;
+          if (!ch) {
+            await interaction.editReply("Could not find the ticket channel."); return;
+          }
+
+          // Remove the support role's access (so only the claimer + ticket opener + admins can see it)
+          if (tc.supportRoleId) {
+            await ch.permissionOverwrites.edit(tc.supportRoleId, { ViewChannel: false }).catch(() => {});
+          }
+          // Grant the claiming staff member exclusive view access
+          await ch.permissionOverwrites.edit(interaction.user.id, {
+            ViewChannel: true,
+            SendMessages: true,
+            ReadMessageHistory: true,
+          }).catch(() => {});
+
+          // Update the ticket in storage
+          await claimTicket(guildId, channelId, interaction.user.id);
+
+          // Try to update the welcome message: disable the Claim button and show claimed label
+          try {
+            const messages = await ch.messages.fetch({ limit: 10 }).catch(() => null);
+            if (messages) {
+              const botMsg = [...messages.values()].find((m: any) => m.author?.id === interaction.client.user?.id && m.components?.length > 0);
+              if (botMsg) {
+                const updatedRow = new ARB().addComponents(
+                  new BB().setCustomId(`ticket:claim:${channelId}:${guildId}`).setLabel(`Claimed by ${interaction.user.username}`).setStyle(BS.Primary).setEmoji("🙋").setDisabled(true),
+                  new BB().setCustomId(`ticket:close:${channelId}:${guildId}`).setLabel("Close Ticket").setStyle(BS.Danger).setEmoji({ id: CE.locked.id, name: CE.locked.name }),
+                );
+                await (botMsg as any).edit({ components: [updatedRow] }).catch(() => {});
+              }
+            }
+          } catch { /* non-critical */ }
+
+          // Announce claim in-channel
+          await ch.send({ embeds: [new EB().setColor(0x5865f2).setDescription(`🙋 <@${interaction.user.id}> has **claimed** this ticket and will be handling your request.`).setTimestamp()] }).catch(() => {});
+
+          // Log to log channel
+          if (tc.logChannelId) {
+            const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
+            if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x5865f2).setTitle("Ticket Claimed")
+              .addFields(
+                { name: "Ticket", value: `${ch} (\`${ticket.ticketId}\`)`, inline: true },
+                { name: "Claimed by", value: `<@${interaction.user.id}>`, inline: true },
+                { name: "Opened by", value: `<@${ticket.userId}>`, inline: true },
+              ).setTimestamp()] }).catch(() => {});
+          }
+
+          await interaction.editReply(`You have claimed **${ticket.ticketId}**. Other support staff no longer have access.`);
+        } catch (err) {
+          logger.error({ err }, "Error handling ticket:claim button");
+          await interaction.editReply("Failed to claim ticket.").catch(() => {});
         }
       } else if (interaction.customId.startsWith("ticket:close:")) {
         const parts = interaction.customId.split(":");

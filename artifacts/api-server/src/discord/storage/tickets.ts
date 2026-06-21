@@ -42,6 +42,7 @@ export interface OpenTicket {
   userId: string;
   createdAt: number;
   status: "open" | "closed";
+  claimedBy?: string;
 }
 
 interface GuildTickets {
@@ -138,4 +139,17 @@ export async function closeOpenTicket(guildId: string, channelId: string): Promi
     delete data[guildId]!.openTickets[channelId];
     queueWrite(data);
   }
+}
+
+export async function claimTicket(
+  guildId: string,
+  channelId: string,
+  claimedBy: string,
+): Promise<OpenTicket | null> {
+  const data = await load();
+  const t = data[guildId]?.openTickets[channelId];
+  if (!t) return null;
+  t.claimedBy = claimedBy;
+  queueWrite(data);
+  return t;
 }
