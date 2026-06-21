@@ -13,6 +13,7 @@ export interface TicketPanel {
   categoryId?: string;
   panelChannelId?: string;
   panelMessageId?: string;
+  questions?: TicketQuestion[];
 }
 
 export interface MultiPanelConfig {
@@ -32,6 +33,12 @@ export interface TicketsModuleConfig {
   transcriptChannelId?: string;
   panels: Record<string, TicketPanel>;
   multiPanel?: MultiPanelConfig;
+}
+
+export interface TicketQuestion {
+  label: string;
+  style: "short" | "paragraph";
+  required: boolean;
 }
 
 export interface OpenTicket {

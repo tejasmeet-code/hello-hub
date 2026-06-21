@@ -302,17 +302,44 @@ export async function startDiscordBot(): Promise<void> {
         if (!panelId || !guildId || !interaction.guild || !interaction.guildId) {
           await interaction.reply({ content: "Invalid ticket button.", flags: 1 << 6 }).catch(() => {}); return;
         }
-        await interaction.deferReply({ flags: 1 << 6 });
         try {
           const tc = await getTicketsConfig(guildId);
-          if (!tc.enabled) { await interaction.editReply("The ticket system is currently disabled."); return; }
+          if (!tc.enabled) {
+            await interaction.reply({ content: "The ticket system is currently disabled.", flags: 1 << 6 }); return;
+          }
           const panel = tc.panels[panelId];
-          if (!panel) { await interaction.editReply("This ticket panel no longer exists."); return; }
+          if (!panel) {
+            await interaction.reply({ content: "This ticket panel no longer exists.", flags: 1 << 6 }); return;
+          }
           const existing = await getOpenTicketsByUser(guildId, interaction.user.id, panelId);
           if (existing.length > 0) {
             const ch = interaction.guild.channels.cache.get(existing[0]!.channelId);
-            await interaction.editReply(ch ? `You already have an open ticket: ${ch}` : "You already have an open ticket."); return;
+            await interaction.reply({ content: ch ? `You already have an open ticket: ${ch}` : "You already have an open ticket.", flags: 1 << 6 }); return;
           }
+
+          // If panel has questions, show a modal for the user to answer first
+          if (panel.questions && panel.questions.length > 0) {
+            const { ModalBuilder, ActionRowBuilder: MARB, TextInputBuilder, TextInputStyle } = await import("discord.js");
+            const modal = new ModalBuilder()
+              .setCustomId(`ticket:questions:${panelId}:${guildId}`)
+              .setTitle(panel.embedTitle?.slice(0, 45) || "Open a Ticket");
+            for (const [idx, q] of panel.questions.slice(0, 5).entries()) {
+              modal.addComponents(
+                (new MARB() as any).addComponents(
+                  new TextInputBuilder()
+                    .setCustomId(`q${idx}`)
+                    .setLabel(q.label.slice(0, 45))
+                    .setStyle(q.style === "paragraph" ? TextInputStyle.Paragraph : TextInputStyle.Short)
+                    .setRequired(q.required),
+                ),
+              );
+            }
+            await interaction.showModal(modal);
+            return;
+          }
+
+          // No questions — defer and create the ticket immediately
+          await interaction.deferReply({ flags: 1 << 6 });
           const supportRoleId = panel.supportRoleId ?? tc.supportRoleId;
           const { ChannelType: CT, PermissionFlagsBits: PFB, EmbedBuilder: EB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = await import("discord.js");
           const num = await getNextTicketNumber(guildId, panelId);
@@ -350,7 +377,11 @@ export async function startDiscordBot(): Promise<void> {
           await interaction.editReply(`Your ticket has been created: ${channel}`);
         } catch (err) {
           logger.error({ err }, "Error handling ticket:open button");
-          await interaction.editReply("Failed to create ticket. Check my permissions.").catch(() => {});
+          if ((interaction as any).deferred || (interaction as any).replied) {
+            await (interaction as any).editReply("Failed to create ticket. Check my permissions.").catch(() => {});
+          } else {
+            await interaction.reply({ content: "Failed to create ticket. Check my permissions.", flags: 1 << 6 }).catch(() => {});
+          }
         }
       } else if (interaction.customId.startsWith("ticket:claim:")) {
         // Format: ticket:claim:{channelId}:{guildId}
@@ -518,6 +549,89 @@ export async function startDiscordBot(): Promise<void> {
           } else {
             await interaction.reply(reply).catch(() => {});
           }
+        }
+        return;
+      }
+
+      // Ticket questions modal submit — user filled in pre-ticket form
+      if (interaction.customId.startsWith("ticket:questions:")) {
+        if (!interaction.guild || !interaction.guildId) {
+          await interaction.reply({ content: "Could not process ticket.", flags: 1 << 6 }).catch(() => {}); return;
+        }
+        const parts = interaction.customId.split(":");
+        const panelId = parts[2];
+        const guildId = parts[3];
+        await interaction.deferReply({ flags: 1 << 6 });
+        try {
+          const tc = await getTicketsConfig(guildId!);
+          if (!tc.enabled) { await interaction.editReply("The ticket system is currently disabled."); return; }
+          const panel = tc.panels[panelId!];
+          if (!panel) { await interaction.editReply("This ticket panel no longer exists."); return; }
+          const existing = await getOpenTicketsByUser(guildId!, interaction.user.id, panelId!);
+          if (existing.length > 0) {
+            const ch = interaction.guild.channels.cache.get(existing[0]!.channelId);
+            await interaction.editReply(ch ? `You already have an open ticket: ${ch}` : "You already have an open ticket."); return;
+          }
+
+          // Collect the answers from the modal fields
+          const answers: { label: string; answer: string }[] = [];
+          for (const [idx, q] of (panel.questions ?? []).slice(0, 5).entries()) {
+            const val = interaction.fields.getTextInputValue(`q${idx}`);
+            answers.push({ label: q.label, answer: val });
+          }
+
+          const supportRoleId = panel.supportRoleId ?? tc.supportRoleId;
+          const { ChannelType: CT, PermissionFlagsBits: PFB, EmbedBuilder: EB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = await import("discord.js");
+          const num = await getNextTicketNumber(guildId!, panelId!);
+          const ticketId = `${panel.name}-${String(num).padStart(3, "0")}`;
+          const botMe = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
+          if (!botMe) { await interaction.editReply("Could not resolve my member object — please try again."); return; }
+
+          const overwrites: any[] = [
+            { id: interaction.guild.id, deny: [PFB.ViewChannel] },
+            { id: interaction.user.id, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] },
+            { id: botMe.id, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ManageChannels, PFB.ReadMessageHistory] },
+          ];
+          if (supportRoleId) overwrites.push({ id: supportRoleId, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] });
+          if (tc.adminRoleId) overwrites.push({ id: tc.adminRoleId, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] });
+
+          const channel = await interaction.guild.channels.create({
+            name: ticketId, type: CT.GuildText, parent: panel.categoryId ?? undefined, permissionOverwrites: overwrites, reason: `Ticket by ${interaction.user.tag}`,
+          });
+          await createOpenTicket({ ticketId, panelId: panelId!, channelId: channel.id, guildId: guildId!, userId: interaction.user.id, createdAt: Date.now(), status: "open" });
+
+          // Build welcome embed with answers included
+          const welcomeEmbed = new EB()
+            .setTitle(`${CE.ticket.str} ${ticketId}`)
+            .setColor(panel.embedColor || 0x5865f2)
+            .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
+            .setFooter({ text: "Use the buttons below to manage this ticket." })
+            .setTimestamp();
+          if (answers.length > 0) {
+            welcomeEmbed.addFields(
+              answers.map((a) => ({ name: a.label, value: a.answer.slice(0, 1024) || "*No answer*", inline: false })),
+            );
+          }
+
+          const ticketRow = new ARB().addComponents(
+            new BB().setCustomId(`ticket:claim:${channel.id}:${guildId}`).setLabel("Claim").setStyle(BS.Primary).setEmoji("🙋"),
+            new BB().setCustomId(`ticket:close:${channel.id}:${guildId}`).setLabel("Close Ticket").setStyle(BS.Danger).setEmoji({ id: CE.locked.id, name: CE.locked.name }),
+          );
+          const ping = supportRoleId ? `<@&${supportRoleId}>` : "";
+          await channel.send({ content: `${ping} ${interaction.user}`.trim(), embeds: [welcomeEmbed], components: [ticketRow as any] });
+          if (tc.logChannelId) {
+            const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
+            if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x57f287).setTitle("Ticket Opened")
+              .addFields(
+                { name: "Ticket", value: `${channel} (\`${ticketId}\`)`, inline: true },
+                { name: "Opened by", value: `<@${interaction.user.id}>`, inline: true },
+                { name: "Panel", value: panel.name, inline: true },
+              ).setTimestamp()] }).catch(() => {});
+          }
+          await interaction.editReply(`Your ticket has been created: ${channel}`);
+        } catch (err) {
+          logger.error({ err }, "Error handling ticket:questions modal submit");
+          await interaction.editReply("Failed to create ticket. Check my permissions.").catch(() => {});
         }
         return;
       }

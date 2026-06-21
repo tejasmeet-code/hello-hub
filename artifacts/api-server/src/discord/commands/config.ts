@@ -45,7 +45,7 @@ import { isAdminOrOwner } from "../utils/staffPerms";
 import { PERM_WHITELIST } from "../storage/whitelist";
 import { logger } from "../../lib/logger";
 import { addStaffRole, listStaffRoles, removeStaffRole } from "../storage/staff";
-import { getTicketsConfig, updateTicketsConfig, type TicketsModuleConfig, type TicketPanel } from "../storage/tickets";
+import { getTicketsConfig, updateTicketsConfig, type TicketsModuleConfig, type TicketPanel, type TicketQuestion } from "../storage/tickets";
 import { getAutomodConfig, updateAutomodConfig } from "../storage/automod";
 import { getLevelConfig, updateLevelConfig, type LevelConfig, type LevelRole } from "../storage/levels";
 import {
@@ -2077,6 +2077,9 @@ function ticketsOverviewRows(tc: TicketsModuleConfig): Row[] {
 }
 
 function buildTicketPanelEmbed(panel: TicketPanel): EmbedBuilder {
+  const questionsText = panel.questions && panel.questions.length > 0
+    ? panel.questions.map((q, i) => `**${i + 1}.** ${q.label} *(${q.style}, ${q.required ? "required" : "optional"})*`).join("\n")
+    : "*No questions — ticket opens immediately.*";
   return new EmbedBuilder()
     .setTitle(`${CE.ticket.str} Panel — ${panel.name}`)
     .setColor(panel.embedColor || 0x5865f2)
@@ -2088,8 +2091,45 @@ function buildTicketPanelEmbed(panel: TicketPanel): EmbedBuilder {
       { name: "Category", value: panel.categoryId ? `<#${panel.categoryId}>` : "*Root of server*", inline: true },
       { name: "Panel Channel", value: panel.panelChannelId ? `<#${panel.panelChannelId}>` : "*Not posted*", inline: true },
       { name: "Embed Description", value: panel.embedDescription ? panel.embedDescription.slice(0, 200) : "*Not set*", inline: false },
+      { name: `Pre-Ticket Questions (${panel.questions?.length ?? 0}/5)`, value: questionsText, inline: false },
     )
     .setFooter({ text: `Panel ID: ${panel.id}` });
+}
+
+function buildPanelQuestionsEmbed(panel: TicketPanel): EmbedBuilder {
+  const qs = panel.questions ?? [];
+  const desc = qs.length > 0
+    ? qs.map((q, i) => `**${i + 1}.** ${q.label}\n> Style: \`${q.style}\` · ${q.required ? "Required" : "Optional"}`).join("\n\n")
+    : "*No questions configured yet.*\n\nAdd up to 5 questions. Users will answer them in a pop-up form before the ticket channel is created.";
+  return new EmbedBuilder()
+    .setTitle(`${CE.ticket.str} Pre-Ticket Questions — ${panel.name}`)
+    .setColor(panel.embedColor || 0x5865f2)
+    .setDescription(desc)
+    .setFooter({ text: `${qs.length}/5 questions · Changes take effect on the next ticket opened` });
+}
+
+function panelQuestionsRows(panel: TicketPanel): Row[] {
+  const qs = panel.questions ?? [];
+  const rows: Row[] = [];
+  if (qs.length < 5) {
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`cfg:tickets:panel:addQuestion:${panel.id}`).setLabel("Add Question").setStyle(ButtonStyle.Success).setEmoji("➕"),
+    ));
+  }
+  if (qs.length > 0) {
+    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      ...qs.map((q, i) =>
+        new ButtonBuilder()
+          .setCustomId(`cfg:tickets:panel:removeQuestion:${panel.id}:${i}`)
+          .setLabel(`Remove #${i + 1}: ${q.label.slice(0, 20)}`)
+          .setStyle(ButtonStyle.Danger),
+      ),
+    ));
+  }
+  rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`cfg:tickets:panel:view:${panel.id}`).setLabel("← Back to Panel").setStyle(ButtonStyle.Secondary),
+  ));
+  return rows;
 }
 
 function ticketPanelRows(panel: TicketPanel): Row[] {
@@ -2100,6 +2140,7 @@ function ticketPanelRows(panel: TicketPanel): Row[] {
       new ButtonBuilder().setCustomId(`cfg:tickets:panel:setCategory:${panel.id}`).setLabel("Set Category").setStyle(ButtonStyle.Secondary).setEmoji({ id: CE.folder.id, name: CE.folder.name, animated: CE.folder.animated }),
     ),
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`cfg:tickets:panel:questions:${panel.id}`).setLabel(`Questions (${panel.questions?.length ?? 0}/5)`).setStyle(ButtonStyle.Secondary).setEmoji("❓"),
       new ButtonBuilder().setCustomId(`cfg:tickets:panel:setChannel:${panel.id}`).setLabel("Set Panel Channel").setStyle(ButtonStyle.Secondary).setEmoji({ id: CE.announce.id, name: CE.announce.name, animated: CE.announce.animated }),
       new ButtonBuilder().setCustomId(`cfg:tickets:panel:post:${panel.id}`).setLabel(panel.panelMessageId ? "Re-Post Panel" : "Post Panel").setStyle(ButtonStyle.Success).setEmoji({ id: CE.success.id, name: CE.success.name, animated: CE.success.animated }),
       new ButtonBuilder().setCustomId(`cfg:tickets:panel:delete:${panel.id}`).setLabel("Delete Panel").setStyle(ButtonStyle.Danger).setEmoji({ id: CE.trash.id, name: CE.trash.name, animated: CE.trash.animated }),
@@ -2649,6 +2690,73 @@ const command: SlashCommand = {
           const panelId = id.slice("cfg:tickets:panel:delete:".length);
           const tc = await updateTicketsConfig(guildId, (c) => { const panels = { ...c.panels }; delete panels[panelId]; return { ...c, panels }; });
           await safeUpdate(i, { embeds: [buildTicketsOverviewEmbed(tc)], components: ticketsOverviewRows(tc) });
+          return;
+        }
+
+        // ── Ticket questions management ───────────────────────────────────────
+        if (id.startsWith("cfg:tickets:panel:questions:")) {
+          const panelId = id.slice("cfg:tickets:panel:questions:".length);
+          const tc = await getTicketsConfig(guildId);
+          const panel = tc.panels[panelId]; if (!panel) return;
+          await safeUpdate(i, { embeds: [buildPanelQuestionsEmbed(panel)], components: panelQuestionsRows(panel) });
+          return;
+        }
+
+        if (id.startsWith("cfg:tickets:panel:addQuestion:")) {
+          const panelId = id.slice("cfg:tickets:panel:addQuestion:".length);
+          const tc = await getTicketsConfig(guildId);
+          const panel = tc.panels[panelId]; if (!panel) return;
+          if ((panel.questions?.length ?? 0) >= 5) {
+            await i.reply({ content: "Maximum of 5 questions allowed per panel.", flags: 1 << 6 }); return;
+          }
+          const modal = new ModalBuilder().setCustomId(`cfg:tickets:panel:addQuestionModal:${panelId}`).setTitle("Add Pre-Ticket Question").addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("label").setLabel("Question (shown to user, max 45 chars)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(45).setPlaceholder("e.g. What is your issue?"),
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("style").setLabel('Answer style: "short" or "paragraph"').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(9).setPlaceholder("short").setValue("short"),
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder().setCustomId("required").setLabel('Required? "yes" or "no"').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(3).setPlaceholder("yes").setValue("yes"),
+            ),
+          );
+          await i.showModal(modal);
+          try {
+            const submit = await i.awaitModalSubmit({ filter: (s) => s.customId === `cfg:tickets:panel:addQuestionModal:${panelId}` && s.user.id === i.user.id, time: 5 * 60 * 1000 });
+            const label = submit.fields.getTextInputValue("label").trim();
+            const rawStyle = submit.fields.getTextInputValue("style").trim().toLowerCase();
+            const rawRequired = submit.fields.getTextInputValue("required").trim().toLowerCase();
+            const style: TicketQuestion["style"] = rawStyle === "paragraph" ? "paragraph" : "short";
+            const required = rawRequired !== "no";
+            const newQuestion: TicketQuestion = { label, style, required };
+            const updatedTc = await updateTicketsConfig(guildId, (c) => {
+              const p = c.panels[panelId]; if (!p) return c;
+              return { ...c, panels: { ...c.panels, [panelId]: { ...p, questions: [...(p.questions ?? []), newQuestion] } } };
+            });
+            const updatedPanel = updatedTc.panels[panelId]!;
+            if (submit.isFromMessage()) {
+              await safeSubmitUpdate(submit, { embeds: [buildPanelQuestionsEmbed(updatedPanel)], components: panelQuestionsRows(updatedPanel) });
+            } else {
+              await submit.reply({ content: "Question added!", flags: 1 << 6 });
+            }
+          } catch { /* dismissed */ }
+          return;
+        }
+
+        if (id.startsWith("cfg:tickets:panel:removeQuestion:")) {
+          const rest = id.slice("cfg:tickets:panel:removeQuestion:".length);
+          const lastColon = rest.lastIndexOf(":");
+          const panelId = rest.slice(0, lastColon);
+          const idx = parseInt(rest.slice(lastColon + 1), 10);
+          const updatedTc = await updateTicketsConfig(guildId, (c) => {
+            const p = c.panels[panelId]; if (!p) return c;
+            const qs = [...(p.questions ?? [])];
+            qs.splice(idx, 1);
+            return { ...c, panels: { ...c.panels, [panelId]: { ...p, questions: qs } } };
+          });
+          const updatedPanel = updatedTc.panels[panelId];
+          if (!updatedPanel) return;
+          await safeUpdate(i, { embeds: [buildPanelQuestionsEmbed(updatedPanel)], components: panelQuestionsRows(updatedPanel) });
           return;
         }
 
