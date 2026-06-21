@@ -1,36 +1,52 @@
-# [Project name]
+# Hello Hub — Discord Bot (Relosta Bot)
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Discord bot with staff management, moderation, fun commands, and more. Hosted as an Express API server that starts the Discord.js bot in the same process.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — build + run the API server (port 8080)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `bash scripts/push-to-github.sh` — push current branch to GitHub (requires `GIT_TOKEN` secret)
+- Required secrets: `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID` — without these the bot won't connect to Discord
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
+- Bot: discord.js 14
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Build: esbuild (ESM bundle via `build.mjs`)
+- Data persistence: JSON files in `artifacts/api-server/.data/`
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/src/discord/` — all bot code
+  - `client.ts` — Discord client, event handlers, startup
+  - `commands/` — slash command implementations
+  - `storage/` — JSON persistence helpers (config, staff, quota, etc.)
+  - `utils/` — shared helpers (embeds, webhooks, permissions)
+  - `registry.ts` — command registry
+- `artifacts/api-server/src/lib/` — server utilities (logger, paths)
+- `artifacts/api-server/.data/` — runtime JSON data files
+- `lib/api-spec/openapi.yaml` — OpenAPI contract
+- `scripts/push-to-github.sh` — push to GitHub using `GIT_TOKEN`
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Bot and HTTP server run in the same Node.js process; HTTP is just a health check surface.
+- All guild data is stored as JSON in `.data/` (no database required for bot features).
+- Commands are registered per-guild on startup (instant) rather than globally (1h delay, 100-cmd limit).
+- Slash commands use a whitelist-based permission system (see `storage/whitelist.ts`).
+- The `DATA_DIR` env var overrides where `.data/` lives (useful for Railway volume mounts).
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Staff management** — promote/demote, infractions, quotas, LOA, appeals, staff reports
+- **Moderation** — ban, kick, mute, timeout, warn, jail, purge, lock, slowmode, anti-nuke
+- **Fun & games** — trivia, hangman, connect4, tictactoe, slots, roulette, and more
+- **Utilities** — polls, giveaways, server backup, tickets, verification, partnerships
+- **Cross-server** — connect staff servers, global backup, channel/role scramble
 
 ## User preferences
 
@@ -38,7 +54,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The bot won't start without `DISCORD_BOT_TOKEN` and `DISCORD_CLIENT_ID` secrets — add them in Replit Secrets.
+- Per-guild command registration runs on every startup; new guilds are handled via `GuildCreate`.
+- Run `bash scripts/push-to-github.sh` to push changes to GitHub (uses `GIT_TOKEN` secret).
+- `GIT_TOKEN` secret is already configured for GitHub pushes.
 
 ## Pointers
 

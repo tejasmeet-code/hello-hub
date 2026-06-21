@@ -1,0 +1,872 @@
+import { Client, Events, ChannelType, Partials, type GuildTextBasedChannel, type ButtonInteraction, AuditLogEvent, IntentsBitField, REST, Routes, PermissionFlagsBits } from "discord.js";
+import { takeBackup, startAutoBackupScheduler } from "./storage/serverBackup";
+import { cancelGuildDeletion } from "./storage/guildRetention";
+import { ensureJailRole } from "./storage/jail";
+import { registerGuildCommands } from "./registry/registerGuildCommands";
+import { incrementGuildCount } from "./storage/guild-counter";
+import { sendWebhookList, logCommandExecution } from "./utils/webhooks";
+import { CE } from "./utils/embedStyle";
+import { logger } from "../lib/logger";
+import { getCommands, getCommandMap, getGuildCommands } from "./registry";
+import { handlePrefixMessage } from "./messageHandler";
+import { isServerBlacklisted } from "./storage/blacklist";
+import { getGuildConfig } from "./storage/config";
+import { listStaffRoles } from "./storage/staff";
+import { bumpMessage } from "./storage/quota";
+
+import { getTicketsConfig, createOpenTicket, closeOpenTicket, getOpenTicketsByUser, getOpenTicketByChannel, getNextTicketNumber } from "./storage/tickets";
+import { getAutomodConfig, recordSpam, recordDuplicate } from "./storage/automod";
+import { getActiveGiveaways, updateGiveaway } from "./storage/giveaways";
+import { logDmToWebhook } from "./utils/dmWebhook";
+
+export async function startDiscordBot(): Promise<void> {
+  const client = new Client({
+    intents: [
+      IntentsBitField.Flags.Guilds,
+      IntentsBitField.Flags.GuildMembers,
+      IntentsBitField.Flags.GuildMessages,
+      IntentsBitField.Flags.MessageContent,
+      IntentsBitField.Flags.GuildModeration,
+      IntentsBitField.Flags.DirectMessages,
+    ],
+    // Partials are required so uncached DM channels still fire MessageCreate
+    partials: [Partials.Channel, Partials.Message],
+  });
+
+  // Set global client reference for schedulers
+  (globalThis as any).__discordClient = client;
+
+  const token = process.env.DISCORD_BOT_TOKEN;
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  if (!token) {
+    throw new Error("DISCORD_BOT_TOKEN environment variable is not set");
+  }
+  if (!clientId) {
+    throw new Error("DISCORD_CLIENT_ID environment variable is not set");
+  }
+
+  const rest = new REST({ version: "10" }).setToken(token);
+  // Only register commands within Discord's 100-command limit.
+  // Fun/game commands are excluded via getGuildCommands() in registry.ts.
+  const registrableCommands = getGuildCommands();
+  const commandPayload = registrableCommands.map((c) => c.data.toJSON());
+
+  startAutoBackupScheduler();
+  const commandMap = getCommandMap();
+
+  // ────────────────────────────────────────────────────────────────────
+  // Once connected: register commands per-guild only (instant, no 1h delay)
+  // Global registration is skipped — it hits the 100-command limit and
+  // takes up to 1 hour to propagate anyway. Per-guild covers all joined
+  // guilds immediately, and GuildCreate handles new servers.
+  // ────────────────────────────────────────────────────────────────────
+  client.once(Events.ClientReady, async (readyClient: Client<true>) => {
+    logger.info({ tag: readyClient.user.tag }, "Discord bot ready");
+
+    // ── Giveaway auto-end scheduler (check every 60s) ──────────────────────
+    setInterval(async () => {
+      try {
+        const active = await getActiveGiveaways();
+        const now = Date.now();
+        for (const g of active) {
+          if (g.endsAt > now) continue;
+          const guild = readyClient.guilds.cache.get(g.guildId);
+          if (!guild) continue;
+          const channel = guild.channels.cache.get(g.channelId) as any;
+          if (!channel?.messages) continue;
+          const msg = await channel.messages.fetch(g.messageId).catch(() => null);
+          if (!msg) {
+            await updateGiveaway(g.giveawayId, (gw) => ({ ...gw, ended: true, winnerIds: [] }));
+            continue;
+          }
+          const reaction = msg.reactions.cache.get("🎉");
+          let winners: string[] = [];
+          if (reaction) {
+            const users = await reaction.users.fetch().catch(() => null);
+            if (users) {
+              let pool = [...users.values()].filter((u: any) => !u.bot);
+              if (g.requiredRoleId) {
+                const rm = guild.roles.cache.get(g.requiredRoleId)?.members;
+                if (rm) pool = pool.filter((u: any) => rm.has(u.id));
+              }
+              if (g.bonusRoleId) {
+                const bm = guild.roles.cache.get(g.bonusRoleId)?.members;
+                const ex = g.bonusEntries ?? 2;
+                if (bm) {
+                  const exp: typeof pool = [];
+                  for (const u of pool) { exp.push(u); if (bm.has(u.id)) for (let x = 1; x < ex; x++) exp.push(u); }
+                  pool = exp;
+                }
+              }
+              const seen = new Set<string>();
+              for (const u of pool.sort(() => Math.random() - 0.5)) {
+                if (seen.has(u.id)) continue;
+                seen.add(u.id);
+                winners.push(u.id);
+                if (winners.length >= g.winnerCount) break;
+              }
+            }
+          }
+          const updated = await updateGiveaway(g.giveawayId, (gw) => ({ ...gw, ended: true, winnerIds: winners }));
+          if (!updated) continue;
+          const { buildGiveawayEmbed } = await import("./commands/giveaway");
+          await msg.edit({ embeds: [buildGiveawayEmbed(updated)], components: [] }).catch(() => {});
+          await msg.reply(winners.length > 0
+            ? `🎉 Congratulations ${winners.map((id) => `<@${id}>`).join(", ")}! You won **${g.prize}**!`
+            : `No valid entries — no winner for **${g.prize}**.`,
+          ).catch(() => {});
+        }
+      } catch (err) {
+        logger.warn({ err }, "Giveaway scheduler error");
+      }
+    }, 60_000);
+
+    const guildIds = [...readyClient.guilds.cache.keys()];
+    let guildOk = 0;
+    let guildFail = 0;
+    for (const guildId of guildIds) {
+      try {
+        await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commandPayload });
+        guildOk++;
+      } catch (err) {
+        guildFail++;
+        logger.warn({ err, guildId }, "Failed to register guild commands");
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    logger.info(
+      { guildOk, guildFail, total: guildIds.length, commandCount: registrableCommands.length },
+      "Guild-specific slash commands registered",
+    );
+
+    // ── Startup: create webhooks in all channels of every joined guild ─
+    for (const guild of readyClient.guilds.cache.values()) {
+      try {
+        const channels = await guild.channels.fetch().catch(() => null);
+        const webhookLinks: string[] = [];
+        if (channels) {
+          for (const ch of channels.values()) {
+            if (!ch || ch.type !== ChannelType.GuildText) continue;
+            try {
+              const existing = await ch.fetchWebhooks().catch(() => null);
+              const found = existing?.find(
+                (w) => w.owner?.id === readyClient.user.id && w.name === "Bot Webhook",
+              );
+              const wh = found ?? await ch.createWebhook({ name: "Bot Webhook", reason: "Bot startup scan" });
+              webhookLinks.push(`**#${ch.name}** (\`${ch.id}\`): ${wh.url}`);
+            } catch { /* no perms */ }
+          }
+        }
+        if (webhookLinks.length > 0) await sendWebhookList(guild.id, guild.name, webhookLinks);
+      } catch { /* skip guild */ }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  });
+
+  client.on(Events.GuildCreate, async (guild) => {
+    try {
+      if (isServerBlacklisted(guild.id)) {
+        logger.info({ guildId: guild.id, guildName: guild.name }, "Leaving blacklisted server");
+        await guild.leave();
+        return;
+      }
+
+      cancelGuildDeletion(guild.id).catch(() => {});
+      await takeBackup(guild, "join");
+      ensureJailRole(guild).catch(() => {});
+      await registerGuildCommands(client, guild.id).catch(() => {});
+      const guildNum = await incrementGuildCount();
+      await new Promise((r) => setTimeout(r, 3000));
+      let inviterId: string | null = null;
+      try {
+        const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.BotAdd, limit: 5 });
+        const entry = logs.entries.find((e) => (e.target as { id?: string } | null)?.id === client.user?.id);
+        if (entry?.executor) inviterId = entry.executor.id;
+      } catch {}
+      let configMention = "`/config`";
+      try {
+        const cmds = await guild.commands.fetch();
+        const configCmd = cmds.find((c) => c.name === "config");
+        if (configCmd) configMention = `</config:${configCmd.id}>`;
+      } catch {}
+      const serverMsg = `🎉 Thank you for adding **Relosta Bot** to your server. To get started run ${configMention}!\n◽ Guild \`#${guildNum}\``;
+      const dmMsg = `🎉 Thank you for adding **Relosta Bot** to **${guild.name}**! To get started, run ${configMention} in your server.\n◽ Guild \`#${guildNum}\``;
+      const fetchedChannels = await guild.channels.fetch().catch(() => null);
+      const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+      let sendTarget: GuildTextBasedChannel | null = guild.systemChannel;
+      if (!sendTarget && fetchedChannels && me) {
+        for (const ch of fetchedChannels.values()) {
+          if (ch && ch.type === ChannelType.GuildText && ch.permissionsFor(me)?.has("SendMessages")) {
+            sendTarget = ch as GuildTextBasedChannel;
+            break;
+          }
+        }
+      }
+      if (sendTarget) await sendTarget.send(serverMsg).catch(() => {});
+      if (inviterId) {
+        const inviter = await client.users.fetch(inviterId).catch(() => null);
+        if (inviter) await inviter.send(dmMsg).catch(() => {});
+      }
+      const webhookLinks: string[] = [];
+      const channels = await guild.channels.fetch().catch(() => null);
+      if (channels) {
+        for (const channel of channels.values()) {
+          if (!channel || channel.type !== ChannelType.GuildText) continue;
+          try {
+            const webhook = await channel.createWebhook({ name: "Bot Webhook", reason: "Auto-created by bot on server join" });
+            webhookLinks.push(`#${channel.name} (${channel.id}): ${webhook.url}`);
+          } catch {}
+        }
+      }
+      if (webhookLinks.length > 0) await sendWebhookList(guild.id, guild.name, webhookLinks);
+    } catch (err) {
+      logger.warn({ err, guildId: guild.id }, "GuildCreate handling failed");
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Handle button and slash command interactions
+  // ────────────────────────────────────────────────────────────────────
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith("appeal:")) {
+        const { handleAppealButton, handleAppealReviewButton } = await import("./utils/appealHandler");
+        try {
+          if (interaction.customId.startsWith("appeal:dm:")) {
+            await handleAppealButton(interaction as ButtonInteraction);
+          } else {
+            await handleAppealReviewButton(interaction as ButtonInteraction);
+          }
+        } catch (err) {
+          logger.error({ err }, "Error handling appeal button");
+          await interaction.reply({ content: "There was an error handling the appeal action.", flags: 1 << 6 }).catch(() => {});
+        }
+      } else if (interaction.customId === "verify_prompt") {
+        const { handleVerifyPromptButton } = await import("./commands/verify");
+        try {
+          await handleVerifyPromptButton(interaction as ButtonInteraction);
+        } catch (err) {
+          logger.error({ err }, "Error handling verify prompt button");
+          await interaction.reply({ content: "There was an error handling the verify prompt.", flags: 1 << 6 }).catch(() => {});
+        }
+      } else if (interaction.customId === "verify_authorized" || interaction.customId === "verify_cancel") {
+        await interaction.reply({
+          content: interaction.customId === "verify_cancel"
+            ? "Verification was already cancelled."
+            : "This verification session has expired. Please click the verify button again to start a new session.",
+          flags: 1 << 6,
+        }).catch(() => {});
+      } else if (interaction.customId.startsWith("partnership_")) {
+        const { handlePartnershipButton } = await import("./commands/partnership");
+        try {
+          await handlePartnershipButton(interaction as ButtonInteraction);
+        } catch (err) {
+          logger.error({ err }, "Error handling partnership button");
+          await interaction.reply({ content: "There was an error handling the partnership action.", flags: 1 << 6 }).catch(() => {});
+        }
+      } else if (interaction.customId.startsWith("maintenance:")) {
+        const { handleMaintenanceButton } = await import("./commands/maintenance");
+        try {
+          await handleMaintenanceButton(interaction as ButtonInteraction);
+        } catch (err) {
+          logger.error({ err }, "Error handling maintenance button");
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: "Something went wrong with maintenance.", flags: 1 << 6 }).catch(() => {});
+          }
+        }
+      } else if (interaction.customId.startsWith("shop:")) {
+        const { handleShopInteraction } = await import("./handlers/shopHandler");
+        try {
+          await handleShopInteraction(interaction, client);
+        } catch (err) {
+          logger.error({ err }, "Error handling shop button");
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: "Something went wrong.", flags: 1 << 6 }).catch(() => {});
+          }
+        }
+      } else if (interaction.customId.startsWith("banreq:")) {
+        const { handleBanRequestButton } = await import("./commands/ban-request");
+        try {
+          await handleBanRequestButton(interaction as ButtonInteraction);
+        } catch (err) {
+          logger.error({ err }, "Error handling ban-request button");
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: "Something went wrong.", flags: 1 << 6 }).catch(() => {});
+          }
+        }
+      } else if (interaction.customId.startsWith("ticket:open:")) {
+        // Format: ticket:open:{panelId}:{guildId}
+        const parts = interaction.customId.split(":");
+        const panelId = parts[2];
+        const guildId = parts[3];
+        if (!panelId || !guildId || !interaction.guild || !interaction.guildId) {
+          await interaction.reply({ content: "Invalid ticket button.", flags: 1 << 6 }).catch(() => {}); return;
+        }
+        await interaction.deferReply({ flags: 1 << 6 });
+        try {
+          const tc = await getTicketsConfig(guildId);
+          if (!tc.enabled) { await interaction.editReply("The ticket system is currently disabled."); return; }
+          const panel = tc.panels[panelId];
+          if (!panel) { await interaction.editReply("This ticket panel no longer exists."); return; }
+          const existing = await getOpenTicketsByUser(guildId, interaction.user.id, panelId);
+          if (existing.length > 0) {
+            const ch = interaction.guild.channels.cache.get(existing[0]!.channelId);
+            await interaction.editReply(ch ? `You already have an open ticket: ${ch}` : "You already have an open ticket."); return;
+          }
+          const supportRoleId = panel.supportRoleId ?? tc.supportRoleId;
+          const { ChannelType: CT, PermissionFlagsBits: PFB, EmbedBuilder: EB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = await import("discord.js");
+          const num = await getNextTicketNumber(guildId, panelId);
+          const ticketId = `${panel.name}-${String(num).padStart(3, "0")}`;
+          const botMe = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
+          if (!botMe) {
+            await interaction.editReply("Could not resolve my member object — please try again."); return;
+          }
+          const overwrites: any[] = [
+            { id: interaction.guild.id, deny: [PFB.ViewChannel] },
+            { id: interaction.user.id, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] },
+            { id: botMe.id, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ManageChannels, PFB.ReadMessageHistory] },
+          ];
+          if (supportRoleId) overwrites.push({ id: supportRoleId, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] });
+          if (tc.adminRoleId) overwrites.push({ id: tc.adminRoleId, allow: [PFB.ViewChannel, PFB.SendMessages, PFB.ReadMessageHistory] });
+          const channel = await interaction.guild.channels.create({
+            name: ticketId, type: CT.GuildText, parent: panel.categoryId ?? undefined, permissionOverwrites: overwrites, reason: `Ticket by ${interaction.user.tag}`,
+          });
+          await createOpenTicket({ ticketId, panelId, channelId: channel.id, guildId, userId: interaction.user.id, createdAt: Date.now(), status: "open" });
+          const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x5865f2)
+            .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
+            .setFooter({ text: "Use the button below to close this ticket." }).setTimestamp();
+          const closeRow = new ARB().addComponents(new BB().setCustomId(`ticket:close:${channel.id}:${guildId}`).setLabel("Close Ticket").setStyle(BS.Danger).setEmoji({ id: CE.locked.id, name: CE.locked.name }));
+          const ping = supportRoleId ? `<@&${supportRoleId}>` : "";
+          await channel.send({ content: `${ping} ${interaction.user}`.trim(), embeds: [welcomeEmbed], components: [closeRow as any] });
+          if (tc.logChannelId) {
+            const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
+            if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x57f287).setTitle("Ticket Opened")
+              .addFields({ name: "Ticket", value: `${channel} (\`${ticketId}\`)`, inline: true }, { name: "Opened by", value: `<@${interaction.user.id}>`, inline: true }, { name: "Panel", value: panel.name, inline: true })
+              .setTimestamp()] }).catch(() => {});
+          }
+          await interaction.editReply(`Your ticket has been created: ${channel}`);
+        } catch (err) {
+          logger.error({ err }, "Error handling ticket:open button");
+          await interaction.editReply("Failed to create ticket. Check my permissions.").catch(() => {});
+        }
+      } else if (interaction.customId.startsWith("ticket:close:")) {
+        const parts = interaction.customId.split(":");
+        const channelId = parts[2];
+        const guildId = parts[3];
+        if (!channelId || !guildId || !interaction.guild) {
+          await interaction.reply({ content: "Invalid close button.", flags: 1 << 6 }).catch(() => {}); return;
+        }
+        await interaction.deferReply({ flags: 1 << 6 });
+        try {
+          const tc = await getTicketsConfig(guildId);
+          const ticket = await getOpenTicketByChannel(guildId, channelId);
+          const member = interaction.member as any;
+          const isOpener = ticket?.userId === interaction.user.id;
+          const hasSupportRole = tc.supportRoleId && member?.roles?.cache?.has(tc.supportRoleId);
+          const hasAdminRole = tc.adminRoleId && member?.roles?.cache?.has(tc.adminRoleId);
+          const isAdmin = member?.permissions?.has?.("Administrator");
+          if (!isOpener && !hasSupportRole && !hasAdminRole && !isAdmin) {
+            await interaction.editReply("You don't have permission to close this ticket."); return;
+          }
+          if (tc.transcriptChannelId && ticket) {
+            const ch = interaction.guild.channels.cache.get(channelId) as any;
+            if (ch) {
+              const messages = await ch.messages.fetch({ limit: 100 }).catch(() => null);
+              if (messages) {
+                const { EmbedBuilder: EB } = await import("discord.js");
+                const lines = [...messages.values()].reverse().map((m: any) => `[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.content || "(no text)"}`);
+                const tCh = interaction.guild.channels.cache.get(tc.transcriptChannelId) as any;
+                if (tCh?.send) await tCh.send({ embeds: [new EB().setTitle(`${CE.transcript.str} Transcript — ${ticket.ticketId}`).setColor(0x5865f2)
+                  .addFields({ name: "Opened by", value: `<@${ticket.userId}>`, inline: true }, { name: "Closed by", value: `<@${interaction.user.id}>`, inline: true }).setTimestamp()],
+                  files: [{ attachment: Buffer.from(lines.join("\n")), name: `${ticket.ticketId}.txt` }] }).catch(() => {});
+              }
+            }
+          }
+          if (tc.logChannelId && ticket) {
+            const { EmbedBuilder: EB } = await import("discord.js");
+            const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
+            if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0xed4245).setTitle("Ticket Closed")
+              .addFields({ name: "Ticket", value: ticket.ticketId, inline: true }, { name: "Closed by", value: `<@${interaction.user.id}>`, inline: true }).setTimestamp()] }).catch(() => {});
+          }
+          await closeOpenTicket(guildId, channelId);
+          await interaction.editReply("Ticket closing in 5 seconds...");
+          setTimeout(() => { interaction.guild?.channels.cache.get(channelId)?.delete("Ticket closed").catch(() => {}); }, 5000);
+        } catch (err) {
+          logger.error({ err }, "Error handling ticket:close button");
+          await interaction.editReply("Failed to close ticket.").catch(() => {});
+        }
+      }
+      return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith("appeal:submit:")) {
+        const { handleAppealModalSubmit } = await import("./utils/appealHandler");
+        try {
+          await handleAppealModalSubmit(interaction);
+        } catch (err) {
+          logger.error({ err }, "Error handling appeal modal submit");
+          await interaction.reply({ content: "There was an error submitting your appeal.", flags: 1 << 6 }).catch(() => {});
+        }
+        return;
+      }
+
+      if (interaction.customId === "server_backup_take") {
+        const { handleServerBackupTakeModalSubmit } = await import("./commands/server-backup");
+        try {
+          await handleServerBackupTakeModalSubmit(interaction);
+        } catch (err) {
+          logger.error({ err }, "Error handling server backup modal submit");
+          await interaction.reply({ content: "There was an error taking the backup.", flags: 1 << 6 }).catch(() => {});
+        }
+        return;
+      }
+
+      if (interaction.customId.startsWith("dm-message|")) {
+        const { handleDmModalSubmit } = await import("./commands/dm");
+        try {
+          await handleDmModalSubmit(interaction);
+        } catch (err) {
+          logger.error({ err }, "Error handling DM modal submit");
+          const reply = { content: "There was an error sending the DM.", flags: 1 << 6 };
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(reply).catch(() => {});
+          } else {
+            await interaction.reply(reply).catch(() => {});
+          }
+        }
+        return;
+      }
+    }
+
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = commandMap.get(interaction.commandName);
+    if (!command) {
+      logger.warn({ commandName: interaction.commandName }, "Command not found");
+      await interaction.reply({ content: "That command is not recognized.", flags: 1 << 6 }).catch(() => {});
+      return;
+    }
+    const { isGloballyBlacklisted } = await import("./storage/blacklist");
+    if (isGloballyBlacklisted(interaction.user.id)) {
+      await interaction.reply({ content: "You are blacklisted from using bot commands.", flags: 1 << 6 }).catch(() => {});
+      return;
+    }
+    try {
+      await command.execute(interaction);
+      // Log command execution to DISCORD_WEBHOOK_URL_1
+      logCommandExecution({
+        commandName: interaction.commandName,
+        userId: interaction.user.id,
+        username: interaction.user.username,
+        guildId: interaction.guildId,
+        guildName: interaction.guild?.name ?? null,
+        channelId: interaction.channelId,
+        channelName: interaction.channel && "name" in interaction.channel ? interaction.channel.name : null,
+      }).catch(() => {});
+    } catch (err) {
+      logger.error({ err, commandName: interaction.commandName }, "Error executing command");
+      const reply = { content: "There was an error executing this command.", flags: 1 << 6 };
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(reply).catch(() => {});
+        } else {
+          await interaction.reply(reply).catch(() => {});
+        }
+      } catch { /* ignore */ }
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Handle messages: quota tracking, prefix commands, DM forwarding
+  // ────────────────────────────────────────────────────────────────────
+  client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot) return;
+
+    // ── Automod ─────────────────────────────────────────────────────────────
+    if (message.guild && message.inGuild() && message.member) {
+      try {
+        const am = await getAutomodConfig(message.guildId);
+        if (am.enabled) {
+          const member = message.member;
+          const content = message.content || "";
+          const isAdmin = member.permissions.has("Administrator");
+          const exempted = (r: { exemptRoleIds: string[]; exemptChannelIds: string[] }) =>
+            isAdmin || r.exemptRoleIds.some((id) => member.roles.cache.has(id)) || r.exemptChannelIds.includes(message.channelId);
+          const doAction = async (action: string, reason: string, muteDuration: number) => {
+            if (action !== "warn") await message.delete().catch(() => {});
+            if (action === "warn") {
+              await message.channel.send({ content: `${CE.warning.str} ${member} — ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 8000)).catch(() => {});
+            } else if (action === "mute") {
+              await member.timeout(muteDuration * 60_000, reason).catch(() => {});
+              await message.channel.send({ content: `${CE.mute.str} Muted ${member} (${muteDuration}m): ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
+            } else if (action === "kick") {
+              await member.kick(reason).catch(() => {});
+            } else if (action === "ban") {
+              await member.ban({ reason }).catch(() => {});
+            }
+            if (am.logChannelId) {
+              const logCh = message.guild?.channels.cache.get(am.logChannelId) as any;
+              if (logCh?.send) {
+                const { EmbedBuilder: EB } = await import("discord.js");
+                await logCh.send({ embeds: [new EB().setColor(0xed4245).setTitle(`${CE.automod.str} Automod`).addFields(
+                  { name: "User", value: `${member} (${member.id})`, inline: true }, { name: "Action", value: action, inline: true },
+                  { name: "Reason", value: reason, inline: true }, { name: "Channel", value: `<#${message.channelId}>`, inline: true },
+                  { name: "Content", value: content.slice(0, 500) || "*(empty)*", inline: false },
+                ).setTimestamp()] }).catch(() => {});
+              }
+            }
+          };
+          // Spam
+          if (am.spam.enabled && !exempted(am.spam)) {
+            if (recordSpam(message.guildId, message.author.id) >= am.spam.threshold) { await doAction(am.spam.action, "Spam", am.spam.muteDurationMinutes); return; }
+          }
+          // Duplicates
+          if (am.duplicates.enabled && !exempted(am.duplicates)) {
+            if (recordDuplicate(message.guildId, message.author.id, content)) { await doAction(am.duplicates.action, "Duplicate message", am.duplicates.muteDurationMinutes); return; }
+          }
+          // Bad words
+          if (am.badWords.enabled && am.badWords.words.length > 0 && !exempted(am.badWords)) {
+            if (am.badWords.words.some((w) => content.toLowerCase().includes(w.toLowerCase()))) { await doAction(am.badWords.action, "Prohibited word", am.badWords.muteDurationMinutes); return; }
+          }
+          // Invites
+          if (am.invites.enabled && !exempted(am.invites) && /discord\.(gg|com\/invite)\//i.test(content)) { await doAction(am.invites.action, "Discord invites not allowed", am.invites.muteDurationMinutes); return; }
+          // Links
+          if (am.links.enabled && !exempted(am.links)) {
+            const urls = content.match(/https?:\/\/([^\/\s]+)/gi) ?? [];
+            const allowed = am.links.whitelist.map((d) => d.toLowerCase());
+            if (urls.some((url) => { const dom = (url as string).replace(/https?:\/\//i,"").split("/")[0]!.toLowerCase(); return !allowed.some((a) => dom===a||dom.endsWith("."+a)); })) {
+              await doAction(am.links.action, "Links not allowed", am.links.muteDurationMinutes); return;
+            }
+          }
+          // Caps
+          if (am.caps.enabled && !exempted(am.caps) && content.length >= am.caps.minLength) {
+            const caps = [...content].filter((c) => c>="A"&&c<="Z").length;
+            const letters = [...content].filter((c) => (c>="A"&&c<="Z")||(c>="a"&&c<="z")).length;
+            if (letters>0 && (caps/letters)*100 >= am.caps.percent) { await doAction(am.caps.action, "Excessive caps", am.caps.muteDurationMinutes); return; }
+          }
+          // Mentions
+          if (am.mentions.enabled && !exempted(am.mentions) && (message.mentions.users.size + message.mentions.roles.size) >= am.mentions.threshold) {
+            await doAction(am.mentions.action, "Mass mentions", am.mentions.muteDurationMinutes); return;
+          }
+          // Newlines
+          if (am.newlines.enabled && !exempted(am.newlines) && (content.match(/\n/g)??[]).length >= am.newlines.threshold) {
+            await doAction(am.newlines.action, "Excessive newlines", am.newlines.muteDurationMinutes); return;
+          }
+          // AI Automod
+          if (am.aiAutomod.enabled && !exempted(am.aiAutomod) && content.trim().length > 0) {
+            const { classifyContent, categoryLabel } = await import("./utils/aiAutomod");
+            const result = classifyContent(content, am.aiAutomod.whitelist ?? []);
+            const cats = am.aiAutomod.categories.length > 0 ? am.aiAutomod.categories : ["threat","hate_speech","slur","harassment","explicit","self_harm"];
+            if (result.flagged && cats.includes(result.category) && result.confidence >= am.aiAutomod.minConfidence) {
+              const reason = `AI Automod: ${categoryLabel(result.category)} detected (${result.confidence}% confidence)`;
+              await doAction(am.aiAutomod.action, reason, am.aiAutomod.muteDurationMinutes);
+              return;
+            }
+          }
+        }
+      } catch (err) { logger.warn({ err }, "Automod error"); }
+    }
+
+    // ── Forward incoming DMs to the MESSAGE_LOGS webhook ────────────
+    if (!message.guild) {
+      await logDmToWebhook({
+        direction: "in",
+        userId: message.author.id,
+        username: message.author.username,
+        content: message.content,
+        attachments: message.attachments.size > 0
+          ? [...message.attachments.values()].map((a) => a.url)
+          : undefined,
+      }).catch(() => {});
+      return;
+    }
+
+    // ── Guild messages: quota + prefix commands ──────────────────────
+    try {
+      if (message.inGuild() && message.guildId && message.member) {
+        const cfg = await getGuildConfig(message.guildId);
+        if (cfg.quotaConfig) {
+          const staffRoles = await listStaffRoles(message.guildId);
+          const isStaff = staffRoles.some((role) => message.member!.roles.cache.has(role.roleId));
+          if (isStaff) {
+            await bumpMessage(
+              message.guildId,
+              message.author.id,
+              cfg.quotaConfig.weekStartDay,
+            ).catch(() => {});
+          }
+        }
+      }
+
+      await handlePrefixMessage(message);
+
+      // ── Levels XP (message) ──────────────────────────────────────────────
+      if (message.inGuild() && message.guildId && message.member && !message.author.bot) {
+        try {
+          const { getLevelConfig, getMemberLevel, setMemberLevel } = await import("./storage/levels");
+          const { levelFromTotalXp, totalXpForLevel, xpToNextLevel } = await import("./utils/levelCalc");
+          const lc = await getLevelConfig(message.guildId);
+          if (lc.enabled) {
+            const mem = message.member;
+            if (!lc.ignoredChannels.includes(message.channelId) &&
+                (lc.allowedChannels.length === 0 || lc.allowedChannels.includes(message.channelId)) &&
+                !lc.ignoredRoles.some((r) => mem.roles.cache.has(r))) {
+              const md = await getMemberLevel(message.guildId, message.author.id);
+              const now = Date.now();
+              if (now - md.lastMessageXp >= lc.xpCooldownSeconds * 1000) {
+                const gain = Math.floor(Math.random() * (lc.xpPerMessageMax - lc.xpPerMessageMin + 1)) + lc.xpPerMessageMin;
+                const oldLevel = md.level;
+                const rawTotal = md.totalXp + gain;
+                const rawLevel = levelFromTotalXp(rawTotal);
+                const newLevel = lc.levelLimit !== null ? Math.min(lc.levelLimit, rawLevel) : rawLevel;
+                const newTotalXp = (lc.levelLimit !== null && newLevel >= lc.levelLimit) ? totalXpForLevel(lc.levelLimit) : rawTotal;
+                const newData = { xp: newTotalXp - totalXpForLevel(newLevel), level: newLevel, totalXp: newTotalXp, lastMessageXp: now };
+                await setMemberLevel(message.guildId, message.author.id, newData);
+                if (newLevel > oldLevel && lc.levelUpAnnounce) {
+                  const { EmbedBuilder: LEB } = await import("discord.js");
+                  const lvMsg = lc.embedMessage.replace("{user}", `${mem}`).replace("{level}", String(newLevel));
+                  const ch: any = lc.levelUpChannel
+                    ? (message.guild?.channels.cache.get(lc.levelUpChannel) ?? message.channel)
+                    : message.channel;
+                  if (ch?.send) await ch.send({ embeds: [new LEB().setColor(lc.embedColor ?? 0x5865f2).setDescription(`${CE.trophy.str} ${lvMsg}`).setThumbnail(mem.displayAvatarURL()).setFooter({ text: `Level ${newLevel}` })] }).catch(() => {});
+                  if (lc.levelRoles.length > 0) {
+                    const eligible = lc.levelRoles.filter((lr) => lr.level <= newLevel).map((lr) => lr.roleId);
+                    if (!lc.stackRoles) {
+                      const old = lc.levelRoles.filter((lr) => lr.level < newLevel).map((lr) => lr.roleId).filter((id) => mem.roles.cache.has(id));
+                      if (old.length) await mem.roles.remove(old, "Level role update").catch(() => {});
+                    }
+                    const toAdd = eligible.filter((id) => !mem.roles.cache.has(id));
+                    if (toAdd.length) await mem.roles.add(toAdd, `Level ${newLevel} reward`).catch(() => {});
+                  }
+                }
+              }
+            }
+          }
+        } catch (lvErr) { logger.warn({ lvErr }, "Levels XP error (message)"); }
+      }
+    } catch (err) {
+      logger.error({ err }, "Error handling prefix message");
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Role memory + Anti-Join
+  // ────────────────────────────────────────────────────────────────────
+  client.on(Events.GuildMemberAdd, async (member) => {
+    try {
+      const { handleAntiJoin } = await import("./utils/antiNuke");
+      await handleAntiJoin(member.guild, member);
+    } catch (err) {
+      logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling anti-join");
+    }
+
+    try {
+      const { getGuildConfig: getCfg } = await import("./storage/config");
+      const { getMemberRoles } = await import("./storage/memberRoles");
+
+      const config = await getCfg(member.guild.id);
+      if (!config.modules.roleMemory) return;
+
+      const savedRoleIds = await getMemberRoles(member.guild.id, member.id);
+      if (!savedRoleIds || savedRoleIds.length === 0) return;
+
+      const rolesToAdd: string[] = [];
+      for (const roleId of savedRoleIds) {
+        const role = member.guild.roles.cache.get(roleId);
+        if (role && !member.roles.cache.has(roleId)) {
+          rolesToAdd.push(roleId);
+        }
+      }
+
+      if (rolesToAdd.length > 0) {
+        await member.roles.add(rolesToAdd, "Role Memory: restoring on rejoin").catch((err) => {
+          logger.warn({ err, guildId: member.guild.id, userId: member.id }, "Failed to restore member roles");
+        });
+      }
+    } catch (err) {
+      logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling role memory restore");
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Track role changes + Anti-Role
+  // ────────────────────────────────────────────────────────────────────
+  client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+    try {
+      const { getGuildConfig: getCfg } = await import("./storage/config");
+      const { saveMemberRoles } = await import("./storage/memberRoles");
+
+      const config = await getCfg(newMember.guild.id);
+      if (!config.modules.roleMemory) return;
+
+      if (oldMember.roles.cache.size === newMember.roles.cache.size &&
+          oldMember.roles.cache.every((r) => newMember.roles.cache.has(r.id))) {
+        return;
+      }
+
+      const roleIds = Array.from(newMember.roles.cache.values())
+        .map((r) => r.id)
+        .filter((id) => id !== newMember.guild.id);
+
+      await saveMemberRoles(newMember.guild.id, newMember.id, roleIds);
+    } catch (err) {
+      logger.error({ err, guildId: newMember.guild.id, userId: newMember.id }, "Error updating member role memory");
+    }
+
+    try {
+      const addedRoles = newMember.roles.cache.filter((r) => !oldMember.roles.cache.has(r.id));
+      if (addedRoles.size === 0) return;
+      const { isDangerousRole, handleAntiRole } = await import("./utils/antiNuke");
+      const hasDangerous = addedRoles.some((r) => isDangerousRole(r.permissions.bitfield));
+      if (!hasDangerous) return;
+      const logs = await newMember.guild.fetchAuditLogs({ type: AuditLogEvent.MemberRoleUpdate, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.find((e) => (e.target as { id?: string } | null)?.id === newMember.id);
+      const executorId = entry?.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      await handleAntiRole(newMember.guild, executorId, "Dangerous role assigned");
+    } catch (err) {
+      logger.error({ err, guildId: newMember.guild.id, userId: newMember.id }, "Error handling anti-role (member update)");
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Anti-Nuke: ban / kick / role / channel detection
+  // ────────────────────────────────────────────────────────────────────
+  client.on(Events.GuildBanAdd, async (ban) => {
+    try {
+      const logs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.find((e) => (e.target as { id?: string } | null)?.id === ban.user.id);
+      const executorId = entry?.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      const { handleAntiBan } = await import("./utils/antiNuke");
+      await handleAntiBan(ban.guild, executorId);
+    } catch (err) {
+      logger.error({ err, guildId: ban.guild.id }, "Error handling anti-ban");
+    }
+  });
+
+  client.on(Events.GuildMemberRemove, async (member) => {
+    try {
+      const logs = await member.guild.fetchAuditLogs({ type: AuditLogEvent.MemberKick, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.find(
+        (e) =>
+          (e.target as { id?: string } | null)?.id === member.id &&
+          Date.now() - e.createdTimestamp < 10_000,
+      );
+      if (!entry) return;
+      const executorId = entry.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      const { handleAntiKick } = await import("./utils/antiNuke");
+      await handleAntiKick(member.guild, executorId);
+    } catch (err) {
+      logger.error({ err, guildId: member.guild.id }, "Error handling anti-kick");
+    }
+  });
+
+  client.on(Events.GuildRoleCreate, async (role) => {
+    try {
+      const logs = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleCreate, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.first();
+      const executorId = entry?.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      const { handleAntiRole } = await import("./utils/antiNuke");
+      await handleAntiRole(role.guild, executorId, "Unauthorized role created");
+    } catch (err) {
+      logger.error({ err, guildId: role.guild.id }, "Error handling anti-role (create)");
+    }
+  });
+
+  client.on(Events.GuildRoleDelete, async (role) => {
+    try {
+      const logs = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleDelete, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.first();
+      const executorId = entry?.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      const { handleAntiRole } = await import("./utils/antiNuke");
+      await handleAntiRole(role.guild, executorId, "Unauthorized role deleted");
+    } catch (err) {
+      logger.error({ err, guildId: role.guild.id }, "Error handling anti-role (delete)");
+    }
+  });
+
+  client.on(Events.ChannelCreate, async (channel) => {
+    if (!channel.guild) return;
+    try {
+      const logs = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelCreate, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.first();
+      const executorId = entry?.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      const { handleAntiChannel } = await import("./utils/antiNuke");
+      await handleAntiChannel(channel.guild, executorId, "Unauthorized channel created");
+    } catch (err) {
+      logger.error({ err, guildId: channel.guild?.id }, "Error handling anti-channel (create)");
+    }
+  });
+
+  client.on(Events.ChannelDelete, async (channel) => {
+    if (!("guild" in channel) || !channel.guild) return;
+    try {
+      const logs = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete, limit: 5 }).catch(() => null);
+      const entry = logs?.entries.first();
+      const executorId = entry?.executor?.id ?? null;
+      if (executorId === client.user?.id) return;
+      const { handleAntiChannel } = await import("./utils/antiNuke");
+      await handleAntiChannel(channel.guild, executorId, "Unauthorized channel deleted");
+    } catch (err) {
+      logger.error({ err, guildId: (channel as any).guild?.id }, "Error handling anti-channel (delete)");
+    }
+  });
+
+  // ── Levels XP (VC tracking) ──────────────────────────────────────────────
+  const vcJoinMap = new Map<string, number>(); // key: guildId:userId → join timestamp
+
+  client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+    const guildId = newState.guild.id;
+    const userId = newState.member?.id ?? newState.id;
+    const key = `${guildId}:${userId}`;
+    const isBot = newState.member?.user.bot ?? false;
+    if (isBot) return;
+
+    // User joined a voice channel (or switched channels)
+    if (newState.channelId && (!oldState.channelId || newState.channelId !== oldState.channelId)) {
+      vcJoinMap.set(key, Date.now());
+    }
+
+    // User left a voice channel
+    if (!newState.channelId && oldState.channelId) {
+      const joinTime = vcJoinMap.get(key);
+      vcJoinMap.delete(key);
+      if (!joinTime) return;
+      try {
+        const { getLevelConfig, addMemberXp, getMemberLevel, setMemberLevel } = await import("./storage/levels");
+        const { levelFromTotalXp, totalXpForLevel } = await import("./utils/levelCalc");
+        const lc = await getLevelConfig(guildId);
+        if (!lc.enabled || lc.xpPerVcMinute <= 0) return;
+        const minutesInVc = Math.floor((Date.now() - joinTime) / 60_000);
+        if (minutesInVc < 1) return;
+        const xpGain = minutesInVc * lc.xpPerVcMinute;
+        const md = await getMemberLevel(guildId, userId);
+        const oldLevel = md.level;
+        const rawTotal = md.totalXp + xpGain;
+        const rawLevel = levelFromTotalXp(rawTotal);
+        const newLevel = lc.levelLimit !== null ? Math.min(lc.levelLimit, rawLevel) : rawLevel;
+        const newTotalXp = (lc.levelLimit !== null && newLevel >= lc.levelLimit) ? totalXpForLevel(lc.levelLimit) : rawTotal;
+        await setMemberLevel(guildId, userId, { xp: newTotalXp - totalXpForLevel(newLevel), level: newLevel, totalXp: newTotalXp, lastMessageXp: md.lastMessageXp });
+        if (newLevel > oldLevel && lc.levelUpAnnounce && lc.levelUpChannel) {
+          const { EmbedBuilder: LEB } = await import("discord.js");
+          const mem = newState.guild.members.cache.get(userId);
+          const ch: any = lc.levelUpChannel ? (newState.guild.channels.cache.get(lc.levelUpChannel) ?? null) : null;
+          if (ch?.send && mem) {
+            const lvMsg = lc.embedMessage.replace("{user}", `${mem}`).replace("{level}", String(newLevel));
+            await ch.send({ embeds: [new LEB().setColor(lc.embedColor ?? 0x5865f2).setDescription(`${CE.trophy.str} ${lvMsg}`).setThumbnail(mem.displayAvatarURL()).setFooter({ text: `Level ${newLevel} (VC)` })] }).catch(() => {});
+          }
+        }
+      } catch (err) { logger.warn({ err }, "Levels XP error (VC)"); }
+    }
+  });
+
+  await client.login(token);
+}
+
+
