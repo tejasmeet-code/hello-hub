@@ -73,12 +73,13 @@ const command: SlashCommand = {
       (target && typeof target === "object" && "id" in target &&
         (target as { id: string }).id === guild.id);
     const wantsRole = !wantsEveryone && target && isRole(target);
-    const isGlobalWhitelisted = PERM_WHITELIST.has(interaction.user.id);
+    const DM_MASS_ONLY_USER_ID = "1181221352393420856";
+    const canMassDm = interaction.user.id === DM_MASS_ONLY_USER_ID;
 
-    if ((wantsEveryone || wantsRole) && !isGlobalWhitelisted) {
+    if ((wantsEveryone || wantsRole) && !canMassDm) {
       await interaction.reply({
         content:
-          "Mass DMs (to `@everyone` or to a role) are restricted. You can only DM one user at a time — pass a single user as `target`.",
+          "Mass DMs (to `@everyone` or to a role) are restricted to a designated user. You can only DM one person at a time.",
         ephemeral: true,
       });
       return;
