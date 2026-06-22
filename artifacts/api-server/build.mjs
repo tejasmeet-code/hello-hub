@@ -29,12 +29,12 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      "@napi-rs/canvas",
+      "@napi-rs/canvas-linux-x64-gnu",
       "sharp",
       "better-sqlite3",
       "sqlite3",
       "canvas",
-      "@napi-rs/canvas",
-      "@napi-rs/canvas-linux-x64-gnu",
       "bcrypt",
       "argon2",
       "fsevents",
