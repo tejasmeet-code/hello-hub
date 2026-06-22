@@ -989,20 +989,22 @@ export async function startDiscordBot(): Promise<void> {
         const ch = await guild.channels.fetch(wc.channel.channelId).catch(() => null);
         if (ch && ch.type === ChannelType.GuildText) {
           const textCh = ch as import("discord.js").TextChannel;
+          const chAbove = wc.channel.aboveText
+            ? applyWelcomerPlaceholders(wc.channel.aboveText, user, guild, count)
+            : undefined;
           if (wc.channel.mode === "embed") {
             const embed = buildWelcomerEmbed(wc.channel.embed ?? {}, user, guild, count);
             if (wc.channel.embed?.showAvatar !== false) embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
-            await textCh.send({ embeds: [embed] });
+            await textCh.send({ content: chAbove, embeds: [embed] });
           } else if (wc.channel.mode === "image") {
             const buf = await generateWelcomeImage({
               avatarUrl: user.displayAvatarURL({ extension: "png", size: 256 }),
               username: user.username,
               memberCount: count,
               serverName: guild.name,
-              background: wc.channel.imageBackground,
             });
             const att = new AttachmentBuilder(buf, { name: "welcome.png" });
-            await textCh.send({ files: [att] });
+            await textCh.send({ content: chAbove, files: [att] });
           } else {
             const text = applyWelcomerPlaceholders(wc.channel.message ?? "Welcome {user} to **{server}**!", user, guild, count);
             await textCh.send({ content: text });
@@ -1012,12 +1014,15 @@ export async function startDiscordBot(): Promise<void> {
 
       // DM welcome
       if (wc.dm.enabled) {
+        const dmAbove = wc.dm.aboveText
+          ? applyWelcomerPlaceholders(wc.dm.aboveText, user, guild, count)
+          : undefined;
         if (wc.dm.mode === "embed") {
           const embed = buildWelcomerEmbed(wc.dm.embed ?? {}, user, guild, count);
-          await user.send({ embeds: [embed] }).catch(() => {});
+          await user.send({ content: dmAbove, embeds: [embed] }).catch(() => {});
         } else {
           const text = applyWelcomerPlaceholders(wc.dm.message ?? "Welcome to **{server}**, {username}!", user, guild, count);
-          await user.send({ content: text }).catch(() => {});
+          await user.send({ content: dmAbove ? `${dmAbove}\n${text}` : text }).catch(() => {});
         }
       }
     } catch (err) {
