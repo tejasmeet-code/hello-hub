@@ -48,7 +48,7 @@ import { addStaffRole, listStaffRoles, removeStaffRole } from "../storage/staff"
 import { getTicketsConfig, updateTicketsConfig, type TicketsModuleConfig, type TicketPanel, type TicketQuestion } from "../storage/tickets";
 import { getAutomodConfig, updateAutomodConfig } from "../storage/automod";
 import { getWelcomerConfig, updateWelcomerConfig, type WelcomerConfig, type WelcomerEmbedConfig } from "../storage/welcomer";
-import { BACKGROUND_PRESETS } from "../utils/welcomeImage";
+import { BACKGROUND_IMAGE_COUNT } from "../utils/welcomeImage";
 import { getLevelConfig, updateLevelConfig, type LevelConfig, type LevelRole } from "../storage/levels";
 import {
   getShopSettings, updateShopSettings, generateShopId,
@@ -2394,6 +2394,7 @@ function buildWelcomerChannelEmbed(wc: WelcomerConfig): EmbedBuilder {
   ];
   if (ch.mode === "embed") {
     fields.push(
+      { name: "Text Above Embed",  value: ch.aboveText      ?? "*none*",    inline: false },
       { name: "Embed Title",       value: embed.title       ?? "*default*", inline: true },
       { name: "Embed Description", value: embed.description ?? "*default*", inline: false },
       { name: "Color",             value: embed.color ? `#${embed.color.toString(16).padStart(6, "0").toUpperCase()}` : "*default*", inline: true },
@@ -2402,11 +2403,8 @@ function buildWelcomerChannelEmbed(wc: WelcomerConfig): EmbedBuilder {
       { name: "Thumbnail",         value: embed.thumbnailUrl ?? "*none*",   inline: false },
     );
   } else if (ch.mode === "image") {
-    const bg = ch.imageBackground;
-    const bgLabel = typeof bg === "number"
-      ? `Preset #${bg}: ${BACKGROUND_PRESETS[bg]?.name ?? "?"}`
-      : (typeof bg === "string" && bg ? "Custom URL" : "Preset #0: Deep Space");
-    fields.push({ name: "Background", value: bgLabel, inline: true });
+    fields.push({ name: "Background", value: `Auto-random (${BACKGROUND_IMAGE_COUNT} backgrounds)`, inline: true });
+    fields.push({ name: "Text Above Image", value: ch.aboveText ?? "*none*", inline: false });
   } else {
     fields.push({ name: "Message", value: ch.message ?? "*default*", inline: false });
   }
@@ -2459,17 +2457,21 @@ function welcomerChannelRows(wc: WelcomerConfig): Row[] {
           .setCustomId("cfg:welcomer:channel:editEmbedImages")
           .setLabel("Set Images")
           .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("cfg:welcomer:channel:aboveText")
+          .setLabel("Set Text Above Embed")
+          .setStyle(ButtonStyle.Secondary),
       ),
     );
   } else if (ch.mode === "image") {
-    const bgSel = new StringSelectMenuBuilder()
-      .setCustomId("cfg:welcomer:channel:bgResult")
-      .setPlaceholder("Select background preset")
-      .addOptions([
-        ...BACKGROUND_PRESETS.map((p, i) => ({ label: `${i}: ${p.name}`, value: String(i), description: `Gradient preset #${i}` })),
-        { label: "Custom Image URL", value: "custom", description: "Enter a URL for your own background image" },
-      ]);
-    rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(bgSel));
+    rows.push(
+      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("cfg:welcomer:channel:aboveText")
+          .setLabel("Set Text Above Image")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    );
   } else {
     rows.push(
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
@@ -2499,13 +2501,17 @@ function buildWelcomerDmEmbed(wc: WelcomerConfig): EmbedBuilder {
   ];
   if (dm.mode === "embed") {
     fields.push(
+      { name: "Text Above Embed",  value: dm.aboveText      ?? "*none*",    inline: false },
       { name: "Embed Title",       value: embed.title       ?? "*default*", inline: true },
       { name: "Embed Description", value: embed.description ?? "*default*", inline: false },
       { name: "Footer",            value: embed.footer      ?? "*none*",    inline: true },
       { name: "Image URL",         value: embed.imageUrl    ?? "*none*",    inline: false },
     );
   } else {
-    fields.push({ name: "Message", value: dm.message ?? "*default*", inline: false });
+    fields.push(
+      { name: "Text Above Message", value: dm.aboveText ?? "*none*", inline: false },
+      { name: "Message", value: dm.message ?? "*default*", inline: false },
+    );
   }
   return new EmbedBuilder()
     .setTitle(`${CE.members.str} DM Welcome`)
@@ -2541,6 +2547,10 @@ function welcomerDmRows(wc: WelcomerConfig): Row[] {
           .setCustomId("cfg:welcomer:dm:editEmbedImages")
           .setLabel("Set Images")
           .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("cfg:welcomer:dm:aboveText")
+          .setLabel("Set Text Above Embed")
+          .setStyle(ButtonStyle.Secondary),
       ),
     );
   } else {
@@ -2550,6 +2560,10 @@ function welcomerDmRows(wc: WelcomerConfig): Row[] {
           .setCustomId("cfg:welcomer:dm:editText")
           .setLabel("Edit Message Text")
           .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("cfg:welcomer:dm:aboveText")
+          .setLabel("Set Text Above")
+          .setStyle(ButtonStyle.Secondary),
       ),
     );
   }
@@ -3337,23 +3351,26 @@ const command: SlashCommand = {
           await safeUpdate(submit, { embeds: [buildWelcomerChannelEmbed(wc2)], components: welcomerChannelRows(wc2) });
           return;
         }
-        if (id === "cfg:welcomer:channel:bgResult" && i.isStringSelectMenu()) {
-          const val = i.values[0];
-          if (val === "custom") {
-            const modal = new ModalBuilder().setCustomId("cfg:welcomer:channel:customBgModal").setTitle("Custom Background URL");
-            modal.addComponents(
-              new ActionRowBuilder<any>().addComponents(new TextInputBuilder().setCustomId("url").setLabel("Background image URL (direct image link)").setStyle(TextInputStyle.Short).setRequired(true)),
-            );
-            await i.showModal(modal);
-            const submit = await i.awaitModalSubmit({ time: 120_000, filter: (m) => m.customId === "cfg:welcomer:channel:customBgModal" }).catch(() => null);
-            if (!submit) return;
-            await submit.deferUpdate();
-            const wc2 = await updateWelcomerConfig(guildId, (c) => { c.channel.imageBackground = submit.fields.getTextInputValue("url").trim(); });
-            await safeUpdate(submit, { embeds: [buildWelcomerChannelEmbed(wc2)], components: welcomerChannelRows(wc2) });
-          } else {
-            const wc2 = await updateWelcomerConfig(guildId, (c) => { c.channel.imageBackground = parseInt(val, 10); });
-            await safeUpdate(i, { embeds: [buildWelcomerChannelEmbed(wc2)], components: welcomerChannelRows(wc2) });
-          }
+        if (id === "cfg:welcomer:channel:aboveText") {
+          const wc = await getWelcomerConfig(guildId);
+          const modal = new ModalBuilder().setCustomId("cfg:welcomer:channel:aboveTextModal").setTitle("Text Above Welcome (Channel)");
+          modal.addComponents(
+            new ActionRowBuilder<any>().addComponents(
+              new TextInputBuilder()
+                .setCustomId("text")
+                .setLabel("Text to send above the embed/image (or blank)")
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
+                .setValue(wc.channel.aboveText ?? ""),
+            ),
+          );
+          await i.showModal(modal);
+          const submit = await i.awaitModalSubmit({ time: 120_000, filter: (m) => m.customId === "cfg:welcomer:channel:aboveTextModal" }).catch(() => null);
+          if (!submit) return;
+          await submit.deferUpdate();
+          const raw = submit.fields.getTextInputValue("text").trim();
+          const wc2 = await updateWelcomerConfig(guildId, (c) => { c.channel.aboveText = raw || undefined; });
+          await safeUpdate(submit, { embeds: [buildWelcomerChannelEmbed(wc2)], components: welcomerChannelRows(wc2) });
           return;
         }
         if (id === "cfg:welcomer:channel:editText") {
@@ -3391,15 +3408,16 @@ const command: SlashCommand = {
           try {
             const { applyWelcomerPlaceholders, buildWelcomerEmbed, buildWelcomerText } = await import("../utils/welcomeSender");
             const { generateWelcomeImage } = await import("../utils/welcomeImage");
+            const chAbove = ch.aboveText ? applyWelcomerPlaceholders(ch.aboveText, user, guild, count) : undefined;
             if (ch.mode === "embed") {
               const embed = buildWelcomerEmbed(ch.embed ?? {}, user, guild, count);
               if (ch.embed?.showAvatar !== false) embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
-              await (targetCh as any).send({ embeds: [embed] });
+              await (targetCh as any).send({ content: chAbove, embeds: [embed] });
             } else if (ch.mode === "image") {
-              const imgBuf = await generateWelcomeImage({ avatarUrl: user.displayAvatarURL({ extension: "png", size: 256 }), username: user.username, memberCount: count, serverName: guild.name, background: ch.imageBackground });
+              const imgBuf = await generateWelcomeImage({ avatarUrl: user.displayAvatarURL({ extension: "png", size: 256 }), username: user.username, memberCount: count, serverName: guild.name });
               const { AttachmentBuilder } = await import("discord.js");
               const att = new AttachmentBuilder(imgBuf, { name: "welcome.png" });
-              await (targetCh as any).send({ files: [att] });
+              await (targetCh as any).send({ content: chAbove, files: [att] });
             } else {
               const text = applyWelcomerPlaceholders(ch.message ?? "Welcome {user}!", user, guild, count);
               await (targetCh as any).send({ content: text });
@@ -3494,6 +3512,28 @@ const command: SlashCommand = {
           if (!submit) return;
           await submit.deferUpdate();
           const wc2 = await updateWelcomerConfig(guildId, (c) => { c.dm.message = submit.fields.getTextInputValue("message"); });
+          await safeUpdate(submit, { embeds: [buildWelcomerDmEmbed(wc2)], components: welcomerDmRows(wc2) });
+          return;
+        }
+        if (id === "cfg:welcomer:dm:aboveText") {
+          const wc = await getWelcomerConfig(guildId);
+          const modal = new ModalBuilder().setCustomId("cfg:welcomer:dm:aboveTextModal").setTitle("Text Above DM Welcome");
+          modal.addComponents(
+            new ActionRowBuilder<any>().addComponents(
+              new TextInputBuilder()
+                .setCustomId("text")
+                .setLabel("Text to send above the embed/message (or blank)")
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
+                .setValue(wc.dm.aboveText ?? ""),
+            ),
+          );
+          await i.showModal(modal);
+          const submit = await i.awaitModalSubmit({ time: 120_000, filter: (m) => m.customId === "cfg:welcomer:dm:aboveTextModal" }).catch(() => null);
+          if (!submit) return;
+          await submit.deferUpdate();
+          const raw = submit.fields.getTextInputValue("text").trim();
+          const wc2 = await updateWelcomerConfig(guildId, (c) => { c.dm.aboveText = raw || undefined; });
           await safeUpdate(submit, { embeds: [buildWelcomerDmEmbed(wc2)], components: welcomerDmRows(wc2) });
           return;
         }
