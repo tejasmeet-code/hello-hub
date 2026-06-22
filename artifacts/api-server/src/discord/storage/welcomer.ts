@@ -18,6 +18,7 @@ export interface WelcomerChannelConfig {
   message?: string;
   embed?: WelcomerEmbedConfig;
   imageBackground?: number | string;
+  aboveText?: string;
 }
 
 export interface WelcomerDmConfig {
@@ -25,6 +26,7 @@ export interface WelcomerDmConfig {
   mode: "embed" | "text";
   message?: string;
   embed?: WelcomerEmbedConfig;
+  aboveText?: string;
 }
 
 export interface WelcomerConfig {
