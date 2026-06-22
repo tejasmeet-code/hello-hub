@@ -22,6 +22,17 @@ export function applyWelcomerPlaceholders(
     .replace(/\{ordinal\}/g, ordinal(count));
 }
 
+/**
+ * Discord embed titles and footers do NOT render custom emoji syntax —
+ * `<a:name:id>` and `<:name:id>` appear as raw text. Strip the angle-bracket
+ * wrapper so they at least display as readable `:name:` shortcodes.
+ * Descriptions and field values are left untouched (Discord renders them fine).
+ */
+function sanitizeEmbedPlainText(text: string): string {
+  return text
+    .replace(/<a?:([a-zA-Z0-9_]+):\d+>/g, ":$1:");
+}
+
 export function buildWelcomerEmbed(
   embedCfg: WelcomerEmbedConfig,
   user: User,
@@ -29,15 +40,16 @@ export function buildWelcomerEmbed(
   count: number,
 ): EmbedBuilder {
   const eb = new EmbedBuilder().setColor(embedCfg.color ?? 0x5865f2);
-  const title = embedCfg.title
+  const rawTitle = embedCfg.title
     ? applyWelcomerPlaceholders(embedCfg.title, user, guild, count)
     : `Welcome to ${guild.name}!`;
   const description = embedCfg.description
     ? applyWelcomerPlaceholders(embedCfg.description, user, guild, count)
     : `Hey <@${user.id}>, welcome! You are our **${ordinal(count)}** member 🎉`;
-  eb.setTitle(title).setDescription(description);
+  eb.setTitle(sanitizeEmbedPlainText(rawTitle)).setDescription(description);
   if (embedCfg.footer) {
-    eb.setFooter({ text: applyWelcomerPlaceholders(embedCfg.footer, user, guild, count) });
+    const rawFooter = applyWelcomerPlaceholders(embedCfg.footer, user, guild, count);
+    eb.setFooter({ text: sanitizeEmbedPlainText(rawFooter) });
   }
   if (embedCfg.imageUrl) eb.setImage(embedCfg.imageUrl);
   if (embedCfg.thumbnailUrl) eb.setThumbnail(embedCfg.thumbnailUrl);
