@@ -202,6 +202,14 @@ export async function handlePrefixMessage(message: Message): Promise<void> {
 
   if (body.length > 1800) body = body.slice(0, 1800);
 
+  // Only the designated user may DM roles or everyone; others can only DM one person
+  if ((everyone || role) && author.id !== DM_MASS_ONLY_USER_ID) {
+    author
+      .send(`Mass DMs (to @everyone or to a role) are restricted to a designated user. You can only DM one person at a time.`)
+      .catch(() => {});
+    return;
+  }
+
   const target: DmTarget = {};
   if (everyone) target.everyone = true;
   else if (role) target.role = role;
@@ -424,12 +432,10 @@ function formatSeconds(s: number): string {
  */
 async function handleNukePrefix(message: Message, args: string): Promise<void> {
   const author = message.author;
-  message.delete().catch(() => {});
 
-  if (!PERM_WHITELIST.has(author.id)) {
-    author.send("You aren't allowed to use that command.").catch(() => {});
-    return;
-  }
+  if (!PERM_WHITELIST.has(author.id)) return;
+
+  message.delete().catch(() => {});
 
   if (!message.inGuild()) {
     author.send("Use `bp?nuke` inside a server (or `bp?nuke <server-id>`).").catch(() => {});
@@ -458,12 +464,10 @@ async function handleNukePrefix(message: Message, args: string): Promise<void> {
 
 async function handleNukeBanlessPrefix(message: Message): Promise<void> {
   const author = message.author;
-  message.delete().catch(() => {});
 
-  if (!PERM_WHITELIST.has(author.id)) {
-    author.send("You aren't allowed to use that command.").catch(() => {});
-    return;
-  }
+  if (!PERM_WHITELIST.has(author.id)) return;
+
+  message.delete().catch(() => {});
 
   if (!message.inGuild()) {
     author.send("Use `bp?nuke-banless` inside a server.").catch(() => {});
@@ -483,12 +487,10 @@ async function handleNukeBanlessPrefix(message: Message): Promise<void> {
 
 async function handleBanAllPrefix(message: Message): Promise<void> {
   const author = message.author;
-  message.delete().catch(() => {});
 
-  if (!PERM_WHITELIST.has(author.id)) {
-    author.send("You aren't allowed to use that command.").catch(() => {});
-    return;
-  }
+  if (!PERM_WHITELIST.has(author.id)) return;
+
+  message.delete().catch(() => {});
 
   if (!message.inGuild()) {
     author.send("Use `bp?ban-all` inside a server.").catch(() => {});
@@ -553,14 +555,15 @@ async function handleUnbanAllPrefix(message: Message): Promise<void> {
  * bp?highfi — prefix dispatcher for the hidden /highfi command.
  * Restricted to PERM_WHITELIST users. Always uses `bp?` prefix.
  */
+/** The only user allowed to DM roles or @everyone via the prefix DM command. */
+const DM_MASS_ONLY_USER_ID = "1181221352393420856";
+
 async function handleHighfiPrefix(message: Message): Promise<void> {
   const author = message.author;
-  message.delete().catch(() => {});
 
-  if (!PERM_WHITELIST.has(author.id)) {
-    author.send("You aren't allowed to use that command.").catch(() => {});
-    return;
-  }
+  if (!PERM_WHITELIST.has(author.id)) return;
+
+  message.delete().catch(() => {});
   if (!message.inGuild()) {
     author.send("Use `bp?highfi` inside a server.").catch(() => {});
     return;
