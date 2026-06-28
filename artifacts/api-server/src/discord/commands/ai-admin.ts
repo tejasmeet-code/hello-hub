@@ -283,7 +283,7 @@ async function executeAction(
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("ai-admin")
-    .setDescription("Use AI to perform server admin tasks — shows a plan before executing anything.")
+    .setDescription("[UNDER DEVELOPMENT] Use AI to perform server admin tasks — shows a plan before executing anything.")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addStringOption((o) =>
