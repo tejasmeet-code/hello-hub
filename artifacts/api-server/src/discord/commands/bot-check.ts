@@ -2,38 +2,30 @@ import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
   EmbedBuilder,
+  PermissionFlagsBits,
 } from "discord.js";
 import type { SlashCommand } from "../types";
 import { PERM_WHITELIST } from "../storage/whitelist";
 import { COLORS, CE } from "../utils/embedStyle";
 import { getCommands } from "../registry";
-
-// Re-declare the exclusion set locally so bot-check can report excluded commands
-// without coupling to registry internals.
-const REGISTRATION_EXCLUDED: ReadonlySet<string> = new Set([
-  "channel-shuffle","cursed-nicknames","emoji-channels","role-mystery",
-  "role-rainbow","russianroulette","scramble-channels","scramble-roles",
-  "slots","spooky","upside-down","wordscramble","trivia",
-  "choice","coinflip","fortune","meme","randomcolor","rate","roll","rps",
-  "tictactoe","wouldyourather",
-]);
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
+import { getGuildConfig } from "../storage/config";
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("bot-check")
-    .setDescription("Global-whitelist only: audits every registered bot command. [Dev only]")
-    .setDMPermission(true),
+    .setDescription("Global-whitelist only: Run diagnostic checks on this bot or another bot.")
+    .setDMPermission(false)
+    .addUserOption((o) =>
+      o
+        .setName("target")
+        .setDescription("Mention another bot to check its permissions and status.")
+        .setRequired(false)
+    ),
 
   async execute(interaction: ChatInputCommandInteraction) {
     if (!PERM_WHITELIST.has(interaction.user.id)) {
       await interaction.reply({
-        content: "This command is restricted to global-whitelist users.",
+        content: "This command is restricted to global-whitelist developers.",
         flags: 1 << 6,
       });
       return;
@@ -41,91 +33,102 @@ const command: SlashCommand = {
 
     await interaction.deferReply({ flags: 1 << 6 });
 
-    const all = getCommands();
+    const targetUser = interaction.options.getUser("target");
 
-    // Categorise every command
-    const global: string[]            = [];
-    const guild: string[]             = [];
-    const handlerOnly: string[]       = [];
-    const whitelistOnly: string[]     = [];
-    const issues: string[]            = [];
-
-    const seenNames = new Set<string>();
-    for (const cmd of all) {
-      const n = cmd.data.name;
-      if (seenNames.has(n)) {
-        issues.push(`**Duplicate name**: \`${n}\``);
+    // If a target is provided, check that specific bot
+    if (targetUser) {
+      if (!targetUser.bot) {
+        await interaction.editReply({ content: `${CE.error.str} The target must be a bot.` });
+        return;
       }
-      seenNames.add(n);
 
-      if ((cmd as any).globalWhitelistOnly) {
-        whitelistOnly.push(n);
-      } else if ((cmd as any).globalOnly) {
-        global.push(n);
-      } else if (REGISTRATION_EXCLUDED.has(n)) {
-        handlerOnly.push(n);
-      } else {
-        guild.push(n);
+      const member = await interaction.guild?.members.fetch(targetUser.id).catch(() => null);
+      if (!member) {
+        await interaction.editReply({ content: `${CE.error.str} That bot is not in this server.` });
+        return;
       }
+
+      const perms = member.permissions;
+      const isAdmin = perms.has(PermissionFlagsBits.Administrator);
+      
+      const status = member.presence?.status || "offline";
+      let statusEmoji = "⚫";
+      if (status === "online") statusEmoji = "🟢";
+      if (status === "idle") statusEmoji = "🟡";
+      if (status === "dnd") statusEmoji = "🔴";
+
+      const joinedAt = member.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>` : "Unknown";
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${CE.admin.str} Diagnostics: ${targetUser.tag}`)
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setColor(isAdmin ? COLORS.success : COLORS.warning)
+        .addFields(
+          { name: "Presence", value: `${statusEmoji} ${status.toUpperCase()}`, inline: true },
+          { name: "Joined Server", value: joinedAt, inline: true },
+          { name: "Administrator", value: isAdmin ? `${CE.success.str} Yes` : `${CE.error.str} No`, inline: true },
+          { 
+            name: "Important Permissions", 
+            value: 
+              `Manage Roles: ${perms.has(PermissionFlagsBits.ManageRoles) ? CE.success.str : CE.error.str}\n` +
+              `Manage Channels: ${perms.has(PermissionFlagsBits.ManageChannels) ? CE.success.str : CE.error.str}\n` +
+              `Kick Members: ${perms.has(PermissionFlagsBits.KickMembers) ? CE.success.str : CE.error.str}\n` +
+              `Ban Members: ${perms.has(PermissionFlagsBits.BanMembers) ? CE.success.str : CE.error.str}\n` +
+              `Manage Messages: ${perms.has(PermissionFlagsBits.ManageMessages) ? CE.success.str : CE.error.str}`
+          }
+        )
+        .setFooter({ text: "Note: We cannot check internal latency or databases of other bots." })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+      return;
     }
 
-    // Warn if guild commands would exceed Discord's 100-command limit
-    if (guild.length > 100) {
-      issues.push(`${CE.warning.str} **Guild command count** is **${guild.length}** — exceeds Discord's 100-command limit. Bulk registration will fail.`);
-    }
-    if (guild.length + global.length > 100) {
-      issues.push(`${CE.warning.str} **Global command count** is **${global.length + guild.length}** (combined) — monitor for limit issues.`);
+    // Otherwise, check OUR bot
+    const client = interaction.client;
+    
+    // 1. Latency check
+    const wsPing = client.ws.ping;
+    let wsEmoji = CE.success.str;
+    if (wsPing > 500) wsEmoji = CE.error.str;
+    else if (wsPing > 200) wsEmoji = CE.warning.str;
+
+    // 2. Database check
+    let dbStatus = `${CE.success.str} Connected & Responsive`;
+    let dbTime = 0;
+    try {
+      const dbStart = Date.now();
+      await getGuildConfig(interaction.guildId!);
+      dbTime = Date.now() - dbStart;
+    } catch (e) {
+      dbStatus = `${CE.error.str} Error connecting to Database: ${e instanceof Error ? e.message : String(e)}`;
     }
 
-    // Build summary embed
-    const summary = new EmbedBuilder()
-      .setColor(issues.length ? COLORS.warning : COLORS.success)
-      .setTitle(`${CE.admin.str} Bot Command Audit`)
-      .setDescription(
-        issues.length
-          ? `${CE.warning.str} **${issues.length} issue(s) detected**\n${issues.join("\n")}`
-          : `${CE.success.str} All checks passed — no duplicate names or limit violations.`,
-      )
+    // 3. Permissions check
+    const me = interaction.guild?.members.me;
+    const hasAdmin = me?.permissions.has(PermissionFlagsBits.Administrator) ?? false;
+    const permStatus = hasAdmin ? `${CE.success.str} Administrator (All clear)` : `${CE.error.str} Missing Administrator`;
+
+    // 4. Command registry
+    const allCmds = getCommands();
+    
+    // 5. Uptime
+    const uptime = client.uptime ? `<t:${Math.floor((Date.now() - client.uptime) / 1000)}:R>` : "Unknown";
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${CE.admin.str} System Diagnostics: ${client.user?.tag}`)
+      .setColor(hasAdmin && !dbStatus.includes("Error") ? COLORS.success : COLORS.error)
       .addFields(
-        { name: "Total commands in registry", value: `\`${all.length}\``, inline: true },
-        { name: "Global-only", value: `\`${global.length}\``, inline: true },
-        { name: "Guild-registered", value: `\`${guild.length}\` / 100`, inline: true },
-        { name: "Handler-only (excluded)", value: `\`${handlerOnly.length}\``, inline: true },
-        { name: "Global-whitelist-only", value: `\`${whitelistOnly.length}\``, inline: true },
-        { name: "\u200b", value: "\u200b", inline: true },
+        { name: "WebSocket Ping", value: `${wsEmoji} \`${wsPing}ms\``, inline: true },
+        { name: "Database Latency", value: dbStatus.includes("Error") ? dbStatus : `${CE.success.str} \`${dbTime}ms\``, inline: true },
+        { name: "Uptime", value: uptime, inline: true },
+        { name: "Permissions", value: permStatus, inline: false },
+        { name: "Total Registered Commands", value: `\`${allCmds.length}\``, inline: false }
       )
-      .setFooter({ text: "Use /bot-check to re-run this audit any time." })
+      .setFooter({ text: "Diagnostics check completed." })
       .setTimestamp();
 
-    // Detail embeds — one per category, split into fields of ≤15 commands each
-    const detailEmbeds: EmbedBuilder[] = [];
-
-    function addCategoryEmbeds(title: string, color: number, names: string[]) {
-      if (!names.length) return;
-      const pages = chunk(names, 15);
-      pages.forEach((page, i) => {
-        detailEmbeds.push(
-          new EmbedBuilder()
-            .setColor(color)
-            .setTitle(pages.length > 1 ? `${title} (${i + 1}/${pages.length})` : title)
-            .setDescription(page.map((n) => `\`/${n}\``).join("  ")),
-        );
-      });
-    }
-
-    addCategoryEmbeds(`${CE.admin.str} Global-only`, COLORS.primary, global);
-    addCategoryEmbeds(`${CE.moderation.str} Guild-registered (${guild.length})`, COLORS.info, guild);
-    addCategoryEmbeds(`${CE.settings.str} Handler-only / excluded`, COLORS.neutral, handlerOnly);
-    addCategoryEmbeds(`${CE.staff.str} Global-whitelist-only`, COLORS.staff, whitelistOnly);
-
-    // Discord allows max 10 embeds per message; send in batches
-    const allEmbeds = [summary, ...detailEmbeds];
-    const batches = chunk(allEmbeds, 10);
-
-    await interaction.editReply({ embeds: batches[0] });
-    for (let i = 1; i < batches.length; i++) {
-      await interaction.followUp({ embeds: batches[i], flags: 1 << 6 });
-    }
+    await interaction.editReply({ embeds: [embed] });
   },
 };
 
