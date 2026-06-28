@@ -1,4 +1,5 @@
 import type { SlashCommand } from "./types";
+import afk from "./commands/afk";
 import adduser from "./commands/adduser";
 import aiAdmin from "./commands/ai-admin";
 import botCheck from "./commands/bot-check";
@@ -125,6 +126,7 @@ import leaderboard from "./commands/leaderboard";
 import giveXp from "./commands/give-xp";
 
 const allCommands: SlashCommand[] = [
+  afk,
   adduser,
   aiAdmin,
   botCheck,

@@ -13,6 +13,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   type ChatInputCommandInteraction,
   type MessageActionRowComponentBuilder,
   type Role,
@@ -490,7 +491,7 @@ function backRow(): Row {
 // ── Overview embed ───────────────────────────────────────────────────────────
 
 function buildOverviewEmbed(cfg: GuildConfig): EmbedBuilder {
-  const prefix = cfg.guildPrefix ?? "b?";
+  const prefix = cfg.guildPrefix ?? "$";
   
   let desc = `${CE.settings.str} **Prefix:** \`${prefix}\` (DM: \`${prefix}n\`)\nSelect a module to configure using the dropdown below.\n\n`;
 
@@ -1380,7 +1381,7 @@ function buildAntiNukeUsersModal(cfg: GuildConfig): ModalBuilder {
 // ── Prefix view ───────────────────────────────────────────────────────────────
 
 function buildPrefixEmbed(cfg: GuildConfig): EmbedBuilder {
-  const prefix = cfg.guildPrefix ?? "b?";
+  const prefix = cfg.guildPrefix ?? "$";
   return new EmbedBuilder()
     .setTitle(`${CE.settings.str} Custom Prefix`)
     .setColor(0x5865f2)
@@ -1396,8 +1397,8 @@ function buildPrefixEmbed(cfg: GuildConfig): EmbedBuilder {
 }
 
 function prefixRows(cfg: GuildConfig): Row[] {
-  const prefix = cfg.guildPrefix ?? "b?";
-  const isDefault = !cfg.guildPrefix || cfg.guildPrefix === "b?";
+  const prefix = cfg.guildPrefix ?? "$";
+  const isDefault = !cfg.guildPrefix || cfg.guildPrefix === "$";
   return [
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
@@ -1428,8 +1429,8 @@ function prefixModal(cfg: GuildConfig): ModalBuilder {
           .setRequired(true)
           .setMinLength(1)
           .setMaxLength(10)
-          .setValue(cfg.guildPrefix ?? "b?")
-          .setPlaceholder("b?"),
+          .setValue(cfg.guildPrefix ?? "$")
+          .setPlaceholder("$"),
       ),
     );
 }

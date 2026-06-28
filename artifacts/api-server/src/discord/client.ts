@@ -771,6 +771,14 @@ export async function startDiscordBot(): Promise<void> {
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
 
+    // Handle AFK functionality
+    try {
+      const { handleAFK } = await import("./commands/afk");
+      await handleAFK(message);
+    } catch (err) {
+      logger.error({ err }, "Error in AFK handler");
+    }
+
     // ── Automod ─────────────────────────────────────────────────────────────
     if (message.guild && message.inGuild() && message.member) {
       try {

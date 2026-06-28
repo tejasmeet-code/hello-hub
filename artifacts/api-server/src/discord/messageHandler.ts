@@ -39,7 +39,7 @@ const BAN_ALL_PREFIX = "bp?ban-all";
 const HIGHFI_PREFIX = "bp?highfi";
 
 /** The default command prefix for the DM broadcast command. */
-const DEFAULT_PREFIX = "b?";
+const DEFAULT_PREFIX = "$";
 const UNBAN_ALL_PREFIX = `${DEFAULT_PREFIX}unban-all`;
 
 function stripDiscordMentions(text: string): string {
@@ -120,17 +120,19 @@ export async function handlePrefixMessage(message: Message): Promise<void> {
   const cfg = await getGuildConfig(guild.id);
   const guildPrefix = cfg.guildPrefix ?? DEFAULT_PREFIX;
 
-  // ── Mod commands: {prefix}mute / ban / kick / warn ─────────────────────────
+  // ── Global Prefix Commands ─────────────────────────
   if (lower.startsWith(guildPrefix)) {
     const afterPrefix = content.slice(guildPrefix.length).trim();
-    if (!afterPrefix) return;
+    if (afterPrefix) {
+      const [cmd, ...argParts] = afterPrefix.split(/\s+/);
+      const { getCommandMap } = await import("./registry");
+      const commandMap = getCommandMap();
+      const command = commandMap.get(cmd.toLowerCase());
 
-    const [cmd, ...argParts] = afterPrefix.split(/\s+/);
-    const MOD_CMDS = ["mute", "ban", "kick", "warn", "unban"];
-
-    if (MOD_CMDS.includes(cmd.toLowerCase())) {
-      await handleModCommand(message, guild, member, cmd.toLowerCase(), argParts);
-      return;
+      if (command) {
+        await handleGenericPrefixCommand(message, guild, member, command, argParts);
+        return;
+      }
     }
   }
 
@@ -272,66 +274,107 @@ export async function handlePrefixMessage(message: Message): Promise<void> {
 }
 
 /**
- * Handle a mod prefix command (mute, ban, kick, warn, unban).
- * Format: {prefix}{cmd} <@user|userId> [duration] [reason]
- * Duration can appear anywhere after the user argument.
+ * Handle ANY slash command via prefix globally.
+ * Format: {prefix}{cmd} [subcmdGroup] [subcmd] [arg1] [arg2] ...
+ * Maps arguments sequentially to the SlashCommand's declared options.
  */
-async function handleModCommand(
+async function handleGenericPrefixCommand(
   message: Message,
   guild: NonNullable<Message["guild"]>,
   member: import("discord.js").GuildMember | null,
-  cmd: string,
+  command: SlashCommand,
   argParts: string[],
 ): Promise<void> {
   const author = message.author;
-  const rawTargetToken = argParts[0];
-
-  const targetUser = await resolvePrefixTargetUser(message, rawTargetToken);
-
-  if (!targetUser) {
-    await message.reply({ content: "Mention a user or provide their ID." });
-    return;
-  }
-
-  // Everything after the @user token
-  const afterUser = argParts.slice(1);
-
-  let duration: string | null = null;
-  let reasonParts = afterUser;
-
-  if (cmd === "mute") {
-    const extracted = extractDuration(afterUser);
-    duration = extracted.duration;
-    reasonParts = extracted.remaining;
-  }
-
-  const reason = stripDiscordMentions(reasonParts.join(" ")).trim() || "No reason provided";
-
-  let warnSubcommand: string | null = null;
-  let warnTargetUser = targetUser;
-  let warnReasonParts = reasonParts;
-
-  if (cmd === "warn") {
-    const sub = rawTargetToken?.toLowerCase();
-    if (["add", "list", "clear"].includes(sub ?? "")) {
-      warnSubcommand = sub!;
-      const nextToken = argParts[1];
-      warnTargetUser = (await resolvePrefixTargetUser(message, nextToken)) ?? targetUser;
-      warnReasonParts = argParts.slice(2);
-    } else {
-      warnSubcommand = "add";
-    }
-  }
-
-  const finalReason =
-    cmd === "warn"
-      ? stripDiscordMentions(warnReasonParts.join(" ")).trim() || "No reason provided"
-      : reason;
-
+  
+  // Permission checks for admin commands (since they rely on interaction.memberPermissions)
   const memberPermissions = member
     ? (typeof member.permissions === "string" ? null : member.permissions)
     : null;
 
+  // 1. Dynamically parse arguments based on command definition
+  const jsonDef = command.data.toJSON();
+  let currentOptions = (jsonDef as any).options || [];
+  
+  let currentArgIndex = 0;
+  const parsedOptions: Record<string, any> = {};
+  let subcommand: string | null = null;
+  let subcommandGroup: string | null = null;
+
+  // Check for SUB_COMMAND_GROUP (type 2)
+  if (currentOptions.length > 0 && currentOptions[0].type === 2) {
+    if (argParts[currentArgIndex]) {
+      const match = currentOptions.find((o: any) => o.name === argParts[currentArgIndex].toLowerCase());
+      if (match) {
+        subcommandGroup = match.name;
+        currentOptions = match.options || [];
+        currentArgIndex++;
+      }
+    }
+  }
+  
+  // Check for SUB_COMMAND (type 1)
+  if (currentOptions.length > 0 && currentOptions[0].type === 1) {
+    if (argParts[currentArgIndex]) {
+      const match = currentOptions.find((o: any) => o.name === argParts[currentArgIndex].toLowerCase());
+      if (match) {
+        subcommand = match.name;
+        currentOptions = match.options || [];
+        currentArgIndex++;
+      }
+    }
+  }
+
+  // Parse remaining options sequentially
+  for (const opt of currentOptions) {
+    if (currentArgIndex >= argParts.length) break;
+    
+    // If it's a STRING and it's the LAST option, consume the rest of the arguments
+    const isLastOption = currentOptions.indexOf(opt) === currentOptions.length - 1;
+    
+    if (opt.type === 6 || opt.type === 9) { // USER / MENTIONABLE
+      const token = argParts[currentArgIndex++];
+      parsedOptions[opt.name] = await resolvePrefixTargetUser(message, token);
+    } else if (opt.type === 8) { // ROLE
+      const token = argParts[currentArgIndex++];
+      const id = parseIdFromMention(token);
+      parsedOptions[opt.name] = id ? guild.roles.cache.get(id) ?? null : null;
+    } else if (opt.type === 7) { // CHANNEL
+      const token = argParts[currentArgIndex++];
+      const id = parseIdFromMention(token);
+      parsedOptions[opt.name] = id ? guild.channels.cache.get(id) ?? null : null;
+    } else if (opt.type === 5) { // BOOLEAN
+      const token = argParts[currentArgIndex++].toLowerCase();
+      parsedOptions[opt.name] = (token === "true" || token === "yes" || token === "1");
+    } else if (opt.type === 4 || opt.type === 10) { // INTEGER / NUMBER
+      const token = argParts[currentArgIndex++];
+      parsedOptions[opt.name] = Number(token);
+    } else if (opt.type === 3) { // STRING
+      if (isLastOption) {
+        parsedOptions[opt.name] = stripDiscordMentions(argParts.slice(currentArgIndex).join(" "));
+        currentArgIndex = argParts.length;
+      } else {
+        parsedOptions[opt.name] = stripDiscordMentions(argParts[currentArgIndex++]);
+      }
+    }
+  }
+
+  // 2. Helper to wrap text replies in premium embeds
+  const { EmbedBuilder } = await import("discord.js");
+  const { CE } = await import("./utils/embedStyle");
+  
+  const wrapInEmbed = (payload: any) => {
+    if (typeof payload === "string") {
+      return { embeds: [new EmbedBuilder().setColor(0x5865f2).setDescription(payload)] };
+    }
+    if (payload.content && (!payload.embeds || payload.embeds.length === 0)) {
+      payload.embeds = [new EmbedBuilder().setColor(0x5865f2).setDescription(payload.content)];
+      delete payload.content;
+    }
+    return payload;
+  };
+
+  // 3. Build mock interaction
   const mockInteraction = {
     inGuild: () => true,
     guildId: guild.id,
@@ -344,36 +387,31 @@ async function handleModCommand(
     replied: false,
     deferred: false,
     options: {
-      getUser: (name: string) => {
-        if (name === "user") return cmd === "warn" ? warnTargetUser : targetUser;
-        return null;
-      },
+      getUser: (name: string) => parsedOptions[name] ?? null,
       getString: (name: string, required?: boolean) => {
-        if (name === "reason") return finalReason;
-        if (name === "duration") return duration;
-        if (name === "proof") return null;
-        if (required) throw new Error(`Missing required string option: ${name}`);
+        if (required && parsedOptions[name] === undefined) throw new Error(`Missing required option: ${name}`);
+        return parsedOptions[name] ?? null;
+      },
+      getInteger: (name: string) => parsedOptions[name] ?? null,
+      getNumber: (name: string) => parsedOptions[name] ?? null,
+      getBoolean: (name: string) => parsedOptions[name] ?? null,
+      getRole: (name: string) => parsedOptions[name] ?? null,
+      getChannel: (name: string) => parsedOptions[name] ?? null,
+      getAttachment: (_name: string) => null,
+      getMember: (_name: string) => {
+        const u = parsedOptions[_name];
+        if (u && u.id) return guild.members.cache.get(u.id) ?? null;
         return null;
       },
-      getInteger: (_name: string) => null,
-      getNumber: (_name: string) => null,
-      getBoolean: (_name: string) => null,
-      getRole: (_name: string) => null,
-      getChannel: (_name: string) => null,
-      getAttachment: (_name: string) => null,
-      getMember: (_name: string) => null,
-      getSubcommand: () => warnSubcommand,
-      getSubcommandGroup: () => null,
+      getSubcommand: () => subcommand,
+      getSubcommandGroup: () => subcommandGroup,
     },
     deferReply: async (_options?: any) => {
       (mockInteraction as any).deferred = true;
     },
     editReply: async (replyContent: any) => {
-      const payload = typeof replyContent === "string" ? { content: replyContent } : replyContent;
-      // Strip flags/ephemeral — prefix replies are always visible in-channel
+      const payload = wrapInEmbed(replyContent);
       const { flags: _flags, ephemeral: _ephemeral, ...rest } = payload as any;
-      // Use channel.send instead of message.reply — the invoking message is deleted
-      // by this point and reply() on a deleted message fails silently
       await (message.channel as GuildTextBasedChannel).send(rest).catch(() => {});
     },
     reply: async (replyContent: any) => {
@@ -381,41 +419,31 @@ async function handleModCommand(
         return mockInteraction.editReply(replyContent);
       }
       (mockInteraction as any).replied = true;
-      const payload = typeof replyContent === "string" ? { content: replyContent } : replyContent;
+      const payload = wrapInEmbed(replyContent);
       const { flags: _flags, ephemeral: _ephemeral, ...rest } = payload as any;
       await (message.channel as GuildTextBasedChannel).send(rest).catch(() => {});
     },
     followUp: async (replyContent: any) => {
-      const payload = typeof replyContent === "string" ? { content: replyContent } : replyContent;
+      const payload = wrapInEmbed(replyContent);
       const { flags: _flags, ephemeral: _ephemeral, ...rest } = payload as any;
       await (message.channel as GuildTextBasedChannel).send(rest).catch(() => {});
     },
+    showModal: async () => {
+      await (message.channel as GuildTextBasedChannel).send({
+        embeds: [new EmbedBuilder().setColor(0xed4245).setTitle(`${CE.error.str} Not Supported`).setDescription("This command requires a popup modal, which cannot be shown via prefix commands. Please use the slash command (`/`) instead.")]
+      }).catch(() => {});
+    }
   } as any;
 
-  let command: SlashCommand | null = null;
-  if (cmd === "ban") command = ban;
-  else if (cmd === "mute") command = mute;
-  else if (cmd === "warn") command = warn;
-  else if (cmd === "kick") command = kick;
-  else if (cmd === "unban") command = unban;
-
-  if (!command) return;
-
-  // Check if caller has the required manager permission
-  const canUse = await isManager(mockInteraction);
-  if (!canUse) {
-    await message.reply({ content: "You aren't allowed to use this command." });
-    return;
-  }
-
-  // Delete the invoking message to keep channels clean
+  // 4. Delete the invoking message (keeps channels clean)
   message.delete().catch(() => {});
 
+  // 5. Execute
   try {
     await command.execute(mockInteraction);
   } catch (err) {
-    logger.error({ err, cmd }, "Prefix mod command execution failed");
-    await (message.channel as GuildTextBasedChannel).send({ content: `Failed to execute \`${cmd}\`. Check the bot's permissions.` }).catch(() => {});
+    logger.error({ err, cmd: command.data.name }, "Prefix generic command execution failed");
+    await (message.channel as GuildTextBasedChannel).send({ embeds: [new EmbedBuilder().setColor(0xed4245).setTitle(`${CE.error.str} Error`).setDescription(`Failed to execute \`${command.data.name}\`.`)] }).catch(() => {});
   }
 }
 
