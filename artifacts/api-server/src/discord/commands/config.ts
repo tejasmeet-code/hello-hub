@@ -418,45 +418,54 @@ function shopMiniRows(shop: ShopMiniConfig): Row[] {
 
 // ── Utility rows ─────────────────────────────────────────────────────────────
 
+const CONFIG_CATEGORIES = [
+  { id: "setup", label: "General & Setup", emoji: CE.settings.str, items: ["prefix", "botProfile", "welcomer", "levels"] },
+  { id: "mod", label: "Moderation & Security", emoji: CE.moderation.str, items: ["moderation", "infractions", "automod", "antiNuke", "banRequest", "roleMemory", "appeals"] },
+  { id: "staff", label: "Staff Management", emoji: CE.staff.str, items: ["staff", "promotions", "demotions", "performance", "staffReport", "quota", "loa"] },
+  { id: "utils", label: "Utilities & Features", emoji: CE.folder.str, items: ["tickets", "shop", "partnership", "verify", "serverMaintenance", "botNotifications"] },
+];
+
+const STANDALONE_OPTS: Record<string, { label: string; emoji: { id?: string; name?: string; str?: string }; desc: string }> = {
+  shop: { label: "Shop", emoji: CE.shoppingcart, desc: "Sell services via ticketed shops with ratings and stats." },
+  prefix: { label: "Custom Prefix", emoji: CE.settings, desc: "Set a custom command prefix for this server." },
+  botProfile: { label: "Bot Profile", emoji: CE.admin, desc: "Change the bot's nickname and avatar in this server." },
+  tickets: { label: "Tickets", emoji: CE.ticket, desc: "Set up support ticket panels for your server." },
+  welcomer: { label: "Welcomer", emoji: CE.members, desc: "Greet new members with embeds, image banners, and DMs." },
+  automod: { label: "Automod", emoji: CE.automod, desc: "Automated moderation: spam, bad words, links, caps and more." },
+  levels: { label: "Levels", emoji: CE.trophy, desc: "XP-based leveling: chat and VC rewards, roles, leaderboard." },
+};
+
 function mainDropdownRow(): Row {
   const sel = new StringSelectMenuBuilder()
     .setCustomId("cfg:module:select")
-    .setPlaceholder("Select a Module to Configure")
-    .addOptions([
-      ...MODULE_DEFS.map((m) => {
-        const option: any = {
-          label: m.label,
-          value: m.id,
-          description: m.description,
-        };
-        if (m.emoji?.id && m.emoji?.name) {
-          option.emoji = { id: m.emoji.id, name: m.emoji.name };
+    .setPlaceholder("Select a Module to Configure");
+
+  for (const cat of CONFIG_CATEGORIES) {
+    for (const itemId of cat.items) {
+      if (STANDALONE_OPTS[itemId]) {
+        const o = STANDALONE_OPTS[itemId];
+        sel.addOptions(
+          new StringSelectMenuOptionBuilder()
+            .setLabel(o.label)
+            .setDescription(o.desc)
+            .setEmoji(o.emoji.id ? { id: o.emoji.id, name: o.emoji.name! } : o.emoji.str!)
+            .setValue(itemId === "prefix" || itemId === "botProfile" || itemId === "shop" || itemId === "tickets" || itemId === "welcomer" || itemId === "automod" || itemId === "levels" ? itemId : `cfgmod_${itemId}`)
+        );
+      } else {
+        const m = MODULE_DEFS.find((x) => x.id === itemId);
+        if (m) {
+          sel.addOptions(
+            new StringSelectMenuOptionBuilder()
+              .setLabel(m.label)
+              .setDescription(m.description)
+              .setEmoji(m.emoji.id ? { id: m.emoji.id, name: m.emoji.name } : m.emoji.str)
+              .setValue(`cfgmod_${m.id}`)
+          );
         }
-        return option;
-      }),
-      {
-        label: "Shop",
-        value: "shop",
-        emoji: { id: CE.shoppingcart.id, name: CE.shoppingcart.name },
-        description: "Sell services via ticketed shops with ratings and stats.",
-      },
-      {
-        label: "Custom Prefix",
-        value: "prefix",
-        emoji: { id: CE.settings.id, name: CE.settings.name },
-        description: "Set a custom command prefix for this server.",
-      },
-      {
-        label: "Bot Profile",
-        value: "botProfile",
-        emoji: { id: CE.admin.id, name: CE.admin.name },
-        description: "Change the bot's nickname and avatar in this server.",
-      },
-      { label: "Tickets", value: "tickets", emoji: { id: CE.ticket.id, name: CE.ticket.name }, description: "Set up support ticket panels for your server." },
-      { label: "Welcomer", value: "welcomer", emoji: { id: CE.members.id, name: CE.members.name }, description: "Greet new members with embeds, image banners, and DMs." },
-      { label: "Automod", value: "automod", emoji: { id: CE.automod.id, name: CE.automod.name }, description: "Automated moderation: spam, bad words, links, caps and more." },
-      { label: "Levels", value: "levels", emoji: { id: CE.trophy.id, name: CE.trophy.name }, description: "XP-based leveling: chat and VC rewards, roles, leaderboard." },
-    ]);
+      }
+    }
+  }
+
   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(sel);
 }
 
@@ -481,18 +490,30 @@ function backRow(): Row {
 // ── Overview embed ───────────────────────────────────────────────────────────
 
 function buildOverviewEmbed(cfg: GuildConfig): EmbedBuilder {
-  const moduleLines = MODULE_DEFS.map((m) => {
-    const on = cfg.modules[m.moduleKey as keyof typeof cfg.modules] ?? false;
-    return `${on ? CE.success.str : CE.error.str} **${m.label}**`;
-  });
   const prefix = cfg.guildPrefix ?? "b?";
+  
+  let desc = `${CE.settings.str} **Prefix:** \`${prefix}\` (DM: \`${prefix}n\`)\nSelect a module to configure using the dropdown below.\n\n`;
+
+  for (const cat of CONFIG_CATEGORIES) {
+    desc += `### ${cat.emoji} ${cat.label}\n`;
+    for (const itemId of cat.items) {
+      if (STANDALONE_OPTS[itemId]) {
+        desc += `${CE.information.str} **${STANDALONE_OPTS[itemId].label}**\n`;
+      } else {
+        const m = MODULE_DEFS.find((x) => x.id === itemId);
+        if (m) {
+          const on = cfg.modules[m.moduleKey as keyof typeof cfg.modules] ?? false;
+          desc += `${on ? CE.success.str : CE.error.str} **${m.label}**\n`;
+        }
+      }
+    }
+    desc += "\n";
+  }
+
   return new EmbedBuilder()
-    .setTitle("Config Menu")
+    .setTitle("Relosta Configuration")
     .setColor(0x5865f2)
-    .setDescription(
-      `${CE.settings.str} **Prefix:** \`${prefix}\` (DM: \`${prefix}n\`)\n\n` +
-      "Select a module to configure using the dropdown below.\n\n" + moduleLines.join("\n"),
-    )
+    .setDescription(desc.trim())
     .setFooter({ text: "Administrators always have access." });
 }
 

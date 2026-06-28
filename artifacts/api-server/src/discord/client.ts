@@ -20,6 +20,10 @@ import { getActiveGiveaways, updateGiveaway } from "./storage/giveaways";
 import { logDmToWebhook } from "./utils/dmWebhook";
 import { initPermWhitelist } from "./storage/whitelist";
 
+export function getDiscordClient(): Client {
+  return (globalThis as any).__discordClient;
+}
+
 export async function startDiscordBot(): Promise<void> {
   await initPermWhitelist();
   const client = new Client({
