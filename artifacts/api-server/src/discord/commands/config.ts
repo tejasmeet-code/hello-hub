@@ -420,10 +420,10 @@ function shopMiniRows(shop: ShopMiniConfig): Row[] {
 // ── Utility rows ─────────────────────────────────────────────────────────────
 
 const CONFIG_CATEGORIES = [
-  { id: "setup", label: "General & Setup", emoji: CE.settings.str, items: ["prefix", "botProfile", "welcomer", "levels"] },
-  { id: "mod", label: "Moderation & Security", emoji: CE.moderation.str, items: ["moderation", "infractions", "automod", "antiNuke", "banRequest", "roleMemory", "appeals"] },
-  { id: "staff", label: "Staff Management", emoji: CE.staff.str, items: ["staff", "promotions", "demotions", "performance", "staffReport", "quota", "loa"] },
-  { id: "utils", label: "Utilities & Features", emoji: CE.folder.str, items: ["tickets", "shop", "partnership", "verify", "serverMaintenance", "botNotifications"] },
+  { id: "setup", label: "General & Setup", emoji: CE.settings.str, desc: "Prefix, Bot Profile, Welcomer, Levels", items: ["prefix", "botProfile", "welcomer", "levels"] },
+  { id: "mod", label: "Moderation & Security", emoji: CE.moderation.str, desc: "Automod, Infractions, Anti-Nuke, Role Memory", items: ["moderation", "infractions", "automod", "antiNuke", "banRequest", "roleMemory", "appeals"] },
+  { id: "staff", label: "Staff Management", emoji: CE.staff.str, desc: "Staff tracking, Promotions, Demotions, LOA", items: ["staff", "promotions", "demotions", "performance", "staffReport", "quota", "loa"] },
+  { id: "utils", label: "Utilities & Features", emoji: CE.folder.str, desc: "Tickets, Shop, Verify, Server Maintenance", items: ["tickets", "shop", "partnership", "verify", "serverMaintenance", "botNotifications"] },
 ];
 
 const STANDALONE_OPTS: Record<string, { label: string; emoji: { id?: string; name?: string; str?: string }; desc: string }> = {
@@ -436,33 +436,51 @@ const STANDALONE_OPTS: Record<string, { label: string; emoji: { id?: string; nam
   levels: { label: "Levels", emoji: CE.trophy, desc: "XP-based leveling: chat and VC rewards, roles, leaderboard." },
 };
 
-function mainDropdownRow(): Row {
+function categoryDropdownRow(): Row {
+  const sel = new StringSelectMenuBuilder()
+    .setCustomId("cfg:category:select")
+    .setPlaceholder("Select a Category");
+
+  for (const cat of CONFIG_CATEGORIES) {
+    sel.addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel(cat.label)
+        .setDescription(cat.desc)
+        .setEmoji(cat.emoji)
+        .setValue(`cat_${cat.id}`)
+    );
+  }
+  return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(sel);
+}
+
+function moduleDropdownRow(catId: string): Row {
   const sel = new StringSelectMenuBuilder()
     .setCustomId("cfg:module:select")
     .setPlaceholder("Select a Module to Configure");
 
-  for (const cat of CONFIG_CATEGORIES) {
-    for (const itemId of cat.items) {
-      if (STANDALONE_OPTS[itemId]) {
-        const o = STANDALONE_OPTS[itemId];
+  const cat = CONFIG_CATEGORIES.find(c => c.id === catId);
+  if (!cat) return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(sel);
+
+  for (const itemId of cat.items) {
+    if (STANDALONE_OPTS[itemId]) {
+      const o = STANDALONE_OPTS[itemId];
+      sel.addOptions(
+        new StringSelectMenuOptionBuilder()
+          .setLabel(o.label)
+          .setDescription(o.desc)
+          .setEmoji(o.emoji.id ? { id: o.emoji.id, name: o.emoji.name! } : o.emoji.str!)
+          .setValue(itemId)
+      );
+    } else {
+      const m = MODULE_DEFS.find((x) => x.id === itemId);
+      if (m) {
         sel.addOptions(
           new StringSelectMenuOptionBuilder()
-            .setLabel(o.label)
-            .setDescription(o.desc)
-            .setEmoji(o.emoji.id ? { id: o.emoji.id, name: o.emoji.name! } : o.emoji.str!)
-            .setValue(itemId === "prefix" || itemId === "botProfile" || itemId === "shop" || itemId === "tickets" || itemId === "welcomer" || itemId === "automod" || itemId === "levels" ? itemId : `cfgmod_${itemId}`)
+            .setLabel(m.label)
+            .setDescription(m.description)
+            .setEmoji(m.emoji.id ? { id: m.emoji.id, name: m.emoji.name } : m.emoji.str)
+            .setValue(m.id)
         );
-      } else {
-        const m = MODULE_DEFS.find((x) => x.id === itemId);
-        if (m) {
-          sel.addOptions(
-            new StringSelectMenuOptionBuilder()
-              .setLabel(m.label)
-              .setDescription(m.description)
-              .setEmoji(m.emoji.id ? { id: m.emoji.id, name: m.emoji.name } : m.emoji.str)
-              .setValue(`cfgmod_${m.id}`)
-          );
-        }
       }
     }
   }
@@ -493,22 +511,10 @@ function backRow(): Row {
 function buildOverviewEmbed(cfg: GuildConfig): EmbedBuilder {
   const prefix = cfg.guildPrefix ?? "$";
   
-  let desc = `${CE.settings.str} **Prefix:** \`${prefix}\` (DM: \`${prefix}n\`)\nSelect a module to configure using the dropdown below.\n\n`;
+  let desc = `${CE.settings.str} **Prefix:** \`${prefix}\` (DM: \`${prefix}n\`)\nSelect a category from the dropdown below to configure modules.\n\n`;
 
   for (const cat of CONFIG_CATEGORIES) {
-    desc += `### ${cat.emoji} ${cat.label}\n`;
-    for (const itemId of cat.items) {
-      if (STANDALONE_OPTS[itemId]) {
-        desc += `${CE.information.str} **${STANDALONE_OPTS[itemId].label}**\n`;
-      } else {
-        const m = MODULE_DEFS.find((x) => x.id === itemId);
-        if (m) {
-          const on = cfg.modules[m.moduleKey as keyof typeof cfg.modules] ?? false;
-          desc += `${on ? CE.success.str : CE.error.str} **${m.label}**\n`;
-        }
-      }
-    }
-    desc += "\n";
+    desc += `### ${cat.emoji} ${cat.label}\n${cat.desc}\n\n`;
   }
 
   return new EmbedBuilder()
@@ -516,6 +522,29 @@ function buildOverviewEmbed(cfg: GuildConfig): EmbedBuilder {
     .setColor(0x5865f2)
     .setDescription(desc.trim())
     .setFooter({ text: "Administrators always have access." });
+}
+
+function buildCategoryEmbed(catId: string, cfg: GuildConfig): EmbedBuilder {
+  const cat = CONFIG_CATEGORIES.find(c => c.id === catId);
+  if (!cat) return new EmbedBuilder();
+
+  let desc = `${cat.desc}\nSelect a module to configure using the dropdown below.\n\n`;
+  for (const itemId of cat.items) {
+    if (STANDALONE_OPTS[itemId]) {
+      desc += `${CE.information.str} **${STANDALONE_OPTS[itemId].label}**\n`;
+    } else {
+      const m = MODULE_DEFS.find((x) => x.id === itemId);
+      if (m) {
+        const on = cfg.modules[m.moduleKey as keyof typeof cfg.modules] ?? false;
+        desc += `${on ? CE.success.str : CE.error.str} **${m.label}**\n`;
+      }
+    }
+  }
+
+  return new EmbedBuilder()
+    .setTitle(`${cat.emoji} ${cat.label} Configuration`)
+    .setColor(0x5865f2)
+    .setDescription(desc.trim());
 }
 
 // ── Settings summary (one-liner shown in the module embed) ───────────────────
@@ -2728,7 +2757,15 @@ const command: SlashCommand = {
 
         if (id === "cfg:back") {
           cfg = await getGuildConfig(guildId);
-          await safeUpdate(i, { embeds: [buildOverviewEmbed(cfg)], components: [mainDropdownRow(), closeRow()] });
+          await safeUpdate(i, { embeds: [buildOverviewEmbed(cfg)], components: [categoryDropdownRow(), closeRow()] });
+          return;
+        }
+
+        if (id === "cfg:category:select" && i.isStringSelectMenu()) {
+          const catIdRaw = i.values[0]!;
+          const catId = catIdRaw.replace("cat_", "");
+          cfg = await getGuildConfig(guildId);
+          await safeUpdate(i, { embeds: [buildCategoryEmbed(catId, cfg)], components: [moduleDropdownRow(catId), backRow()] });
           return;
         }
 
