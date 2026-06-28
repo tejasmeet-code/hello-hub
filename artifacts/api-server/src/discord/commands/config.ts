@@ -2703,7 +2703,7 @@ const command: SlashCommand = {
 
     const reply = await interaction.editReply({
       embeds: [buildOverviewEmbed(cfg)],
-      components: [mainDropdownRow(), closeRow()],
+      components: [categoryDropdownRow(), closeRow()],
     });
 
     async function safeUpdate(interaction: any, payload: any): Promise<void> {
