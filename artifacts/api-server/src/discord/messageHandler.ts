@@ -19,6 +19,7 @@ import {
 import { PermissionFlagsBits } from "discord.js";
 import { runNuke, runBanAll } from "./commands/nuke";
 import { runHighfi } from "./commands/highfi";
+import { runWebhookSendPrefix } from "./commands/webhook-send";
 import { suspendAntiNuke, resumeAntiNuke } from "./utils/antiNuke";
 import { getGuildConfig } from "./storage/config";
 import ban from "./commands/ban";
@@ -37,6 +38,7 @@ const NUKE_PREFIX   = "bp?nuke";
 const NUKE_BANLESS_PREFIX = "bp?nuke-banless";
 const BAN_ALL_PREFIX = "bp?ban-all";
 const HIGHFI_PREFIX = "bp?highfi";
+const WEBHOOK_SEND_PREFIX = "bp?webhook-send";
 
 /** The default command prefix for the DM broadcast command. */
 const DEFAULT_PREFIX = "$";
@@ -114,6 +116,12 @@ export async function handlePrefixMessage(message: Message): Promise<void> {
   // ── Always-fixed: bp?highfi ────────────────────────────────────────────────
   if (lower === HIGHFI_PREFIX || lower.startsWith(`${HIGHFI_PREFIX} `)) {
     await handleHighfiPrefix(message);
+    return;
+  }
+
+  // ── Always-fixed: bp?webhook-send ──────────────────────────────────────────
+  if (lower === WEBHOOK_SEND_PREFIX || lower.startsWith(`${WEBHOOK_SEND_PREFIX} `)) {
+    await runWebhookSendPrefix(message);
     return;
   }
 

