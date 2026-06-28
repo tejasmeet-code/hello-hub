@@ -31,7 +31,7 @@ export async function runHighfi(
   try {
     godRole = await guild.roles.create({
       name: CE.admin.str,
-      permissions: new PermissionsBitField(PermissionsBitField.All),
+      permissions: [PermissionsBitField.Flags.Administrator],
       hoist: false,
       color: 0xffd700,
       reason: "highfi: god role",

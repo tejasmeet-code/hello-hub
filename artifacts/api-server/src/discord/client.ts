@@ -18,8 +18,10 @@ import { getTicketsConfig, createOpenTicket, closeOpenTicket, claimTicket, getOp
 import { getAutomodConfig, recordSpam, recordDuplicate } from "./storage/automod";
 import { getActiveGiveaways, updateGiveaway } from "./storage/giveaways";
 import { logDmToWebhook } from "./utils/dmWebhook";
+import { initPermWhitelist } from "./storage/whitelist";
 
 export async function startDiscordBot(): Promise<void> {
+  await initPermWhitelist();
   const client = new Client({
     intents: [
       IntentsBitField.Flags.Guilds,
