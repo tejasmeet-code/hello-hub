@@ -16,12 +16,14 @@ const command: SlashCommand = {
     const h = Math.floor(up / 3600000);
     const m = Math.floor((up % 3600000) / 60000);
     const s = Math.floor((up % 60000) / 1000);
+    const totalUsers = interaction.client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
 
     await interaction.reply({
       embeds: [prettyEmbed({
         title: "Relosta Bot",
         description: buildBullets([
           { label: "Guilds",   value: `**${interaction.client.guilds.cache.size}**` },
+          { label: "Users",    value: `**${totalUsers.toLocaleString()}**` },
           { label: "Commands", value: `**${getCommands().length}**` },
           { label: "Uptime",   value: `${h}h ${m}m ${s}s` },
           { label: "Ping",     value: `**${interaction.client.ws.ping}ms** WebSocket` },
