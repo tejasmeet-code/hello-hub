@@ -62,9 +62,15 @@ const command: SlashCommand = {
       
       if (categoryId === "overview") {
         return new EmbedBuilder()
-          .setTitle(`${CE.success.str} Relosta Bot Help Menu`)
+          .setTitle(`Relosta Bot Help Menu`)
           .setColor(COLORS.primary)
-          .setDescription(`Welcome to the help menu! Use the dropdown below to explore commands by category or to view our Setup Guide and FAQ.\n\n${localCategories.filter(c => !["overview", "setup", "faq", "other"].includes(c.id)).map(c => `> ${c.emoji} **${c.label}** — ${categoryMap.get(c.id)?.length || 0} cmds`).join("\n")}`)
+          .setDescription(`Relosta Bot is the only moderation and utility bot you'll ever need! Explore its features and configure the best systems for your server!\n\n` +
+            `**>_ Commands**\n` +
+            `> Browse through Relosta Bot's\n> command categories in the dropdown\n> below to find new utilities!\n\n` +
+            `**💬 FAQ**\n` +
+            `> Solutions for the most frequent\n> questions our users have when\n> implementing the bot on their\n> server.\n\n` +
+            `**⚙️ Setup**\n` +
+            `> The steps to follow when\n> setting the bot up for the first time on\n> any server.`)
           .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
       }
 
