@@ -49,6 +49,7 @@ export interface StaffProfile {
   ratingSum?: number;
   ratingCount?: number;
   feedbackCooldowns?: Record<string, number>;
+  introduction?: string;
 }
 
 export interface GuildStaff {
@@ -247,6 +248,29 @@ export async function deleteProfile(guildId: string, userId: string): Promise<bo
   delete g.profiles[userId];
   await queueWrite(data);
   return true;
+}
+
+export async function updateProfile(guildId: string, userId: string, updater: (profile: StaffProfile) => StaffProfile): Promise<StaffProfile> {
+  const data = await load();
+  if (!data[guildId]) data[guildId] = { roles: [], profiles: {} };
+  
+  if (!data[guildId].profiles[userId]) {
+    data[guildId].profiles[userId] = {
+      userId,
+      firstJoinedAt: Date.now(),
+      currentRoleId: null,
+      positionHistory: [],
+      promotions: [],
+      demotions: [],
+      infractions: [],
+      terminated: false,
+      partnershipScore: 0,
+    };
+  }
+
+  data[guildId].profiles[userId] = updater(data[guildId].profiles[userId]);
+  await queueWrite(data);
+  return data[guildId].profiles[userId];
 }
 
 export async function recordInfraction(guildId: string, userId: string, type: InfractionType, byUserId: string, reason: string): Promise<InfractionEntry> {

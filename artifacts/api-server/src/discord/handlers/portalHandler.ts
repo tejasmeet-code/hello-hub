@@ -13,14 +13,14 @@ import {
 } from "discord.js";
 import { getGuildConfig } from "../storage/config";
 import { CE, COLORS } from "../utils/embedStyle";
-import { listProfiles, listStaffRoles, addStaffRating, setFeedbackCooldown } from "../storage/staff";
+import { listProfiles, addStaffRating, setFeedbackCooldown, getProfile } from "../storage/staff";
 import { getQuota, currentWeekStart } from "../storage/quota";
 import { getActiveInfractions } from "../storage/staff";
 import { errorEmbed, successEmbed } from "../utils/embedStyle";
 
 const PAGE_SIZE = 25;
 
-export async function buildPortalMessage(guild: Guild, page: number) {
+export async function buildPortalMessage(guild: Guild) {
   const config = await getGuildConfig(guild.id);
   const enabled = config.modules?.staffDirectory;
   if (!enabled) {
@@ -30,7 +30,7 @@ export async function buildPortalMessage(guild: Guild, page: number) {
   const embed = new EmbedBuilder()
     .setTitle(`${CE.staff?.str || "👥"} ${guild.name} Staff Directory & Feedback Portal`)
     .setDescription(
-      `${CE.information?.str || "ℹ️"} Welcome to the **Staff Directory**! Use the dropdown menu below to view public profiles of our active staff members.\n\n` +
+      `${CE.information?.str || "ℹ️"} Welcome to the **Staff Directory**! Click the button below to view public profiles of our active staff members.\n\n` +
       `${CE.moderation?.str || "🛡️"} You can also use this portal to submit feedback, file complaints, or report issues directly to the server management.\n\n` +
       `${CE.admin?.str || "⚙️"} **All submissions are securely logged and reviewed by Server Administrators.**`
     )
@@ -38,161 +38,161 @@ export async function buildPortalMessage(guild: Guild, page: number) {
     .setThumbnail(guild.iconURL({ size: 1024 }) ?? null)
     .setImage("https://files.catbox.moe/uul77u.png");
 
-  const staffRoles = await listStaffRoles(guild.id);
-  const activeStaff: { userId: string; roleId: string; roleName: string; position: number }[] = [];
-  
-  for (const r of staffRoles) {
-    const role = guild.roles.cache.get(r.roleId);
-    if (role) {
-      for (const member of role.members.values()) {
-        if (!activeStaff.some(s => s.userId === member.id)) {
-          activeStaff.push({ userId: member.id, roleId: r.roleId, roleName: role.name, position: r.position });
-        }
-      }
-    }
-  }
+  const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`staff_dir_browse_0`)
+      .setLabel("Browse Staff Directory")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji(CE.staff?.id ?? "👥")
+  );
 
-  activeStaff.sort((a, b) => a.position - b.position);
-
-  const totalPages = Math.ceil(activeStaff.length / PAGE_SIZE) || 1;
-  const safePage = Math.max(0, Math.min(page, totalPages - 1));
-  const pageProfiles = activeStaff.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId("staff_dir_select")
-    .setPlaceholder("Select a staff member...");
-
-  if (pageProfiles.length === 0) {
-    select.addOptions([{ label: "No staff members found", value: "none", description: "There are currently no staff members." }]);
-    select.setDisabled(true);
-  } else {
-    for (const p of pageProfiles) {
-      try {
-        const member = await guild.members.fetch(p.userId).catch(() => null);
-        const name = member ? member.user.username : `Unknown (${p.userId})`;
-        const role = p.roleName;
-        select.addOptions([
-          {
-            label: name,
-            description: `${role} | ID: ${p.userId}`,
-            value: p.userId,
-            emoji: { name: "👤" }
-          }
-        ]);
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-
-  const row1 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select);
-  const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [row1];
-
-  if (totalPages > 1) {
-    const row2 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`staff_dir_prev_${safePage}`)
-        .setLabel("Previous")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage === 0),
-      new ButtonBuilder()
-        .setCustomId(`staff_dir_next_${safePage}`)
-        .setLabel("Next")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage === totalPages - 1)
-    );
-    components.push(row2);
-  }
-
-  return { embeds: [embed], components };
+  return { embeds: [embed], components: [row] };
 }
 
 export async function handlePortalInteraction(interaction: Interaction) {
   if (!interaction.inGuild()) return;
 
+  if (interaction.isButton() && interaction.customId.startsWith("staff_dir_browse_")) {
+    const page = parseInt(interaction.customId.replace("staff_dir_browse_", ""), 10);
+    
+    const config = await getGuildConfig(interaction.guildId!);
+    const portalRoleIds = config.moduleRoles?.staffDirectory || [];
+    
+    if (portalRoleIds.length === 0) {
+      await interaction.reply({ embeds: [errorEmbed("Configuration Error", "No Staff Roles have been configured for the portal. An admin needs to set permissions in `/config`.")], ephemeral: true });
+      return;
+    }
+
+    const activeStaff: { userId: string; roleName: string }[] = [];
+    for (const rId of portalRoleIds) {
+      const role = interaction.guild?.roles.cache.get(rId);
+      if (role) {
+        for (const member of role.members.values()) {
+          if (!activeStaff.some(s => s.userId === member.id)) {
+            activeStaff.push({ userId: member.id, roleName: role.name });
+          }
+        }
+      }
+    }
+
+    const totalPages = Math.ceil(activeStaff.length / PAGE_SIZE) || 1;
+    const safePage = Math.max(0, Math.min(page, totalPages - 1));
+    const pageProfiles = activeStaff.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId("staff_dir_select")
+      .setPlaceholder("Select a staff member...");
+
+    if (pageProfiles.length === 0) {
+      select.addOptions([{ label: "No staff members found", value: "none", description: "There are currently no staff members." }]);
+      select.setDisabled(true);
+    } else {
+      for (const p of pageProfiles) {
+        try {
+          const member = await interaction.guild?.members.fetch(p.userId).catch(() => null);
+          const name = member ? member.user.username : `Unknown (${p.userId})`;
+          select.addOptions([
+            {
+              label: name,
+              description: `${p.roleName} | ID: ${p.userId}`,
+              value: p.userId,
+              emoji: { name: "👤" }
+            }
+          ]);
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    const row1 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select);
+    const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [row1];
+
+    if (totalPages > 1) {
+      const row2 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`staff_dir_browse_${safePage - 1}`)
+          .setLabel("Previous")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage === 0),
+        new ButtonBuilder()
+          .setCustomId(`staff_dir_browse_${safePage + 1}`)
+          .setLabel("Next")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(safePage === totalPages - 1)
+      );
+      components.push(row2);
+    }
+    
+    // We update if they paginated, or reply if they just clicked the first button
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content: "Select a staff member from the dropdown below:", components });
+    } else {
+      await interaction.reply({ content: "Select a staff member from the dropdown below:", components, ephemeral: true });
+    }
+  }
+
   if (interaction.isStringSelectMenu() && interaction.customId === "staff_dir_select") {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferUpdate();
     const targetId = interaction.values[0];
     if (targetId === "none") {
-      await interaction.editReply({ content: "No staff member selected." });
       return;
     }
 
-    const profiles = await listProfiles(interaction.guildId);
-    const profile = profiles.find(p => p.userId === targetId);
+    const profile = await getProfile(interaction.guildId!, targetId);
     const member = await interaction.guild?.members.fetch(targetId).catch(() => null);
     
-    if (!profile || !member) {
-      await interaction.editReply({ embeds: [errorEmbed("Not Found", "Could not load this staff member's profile.")] });
+    if (!member) {
+      await interaction.editReply({ content: "Staff member not found.", embeds: [], components: [] });
       return;
     }
 
-    const role = profile.currentRoleId ? interaction.guild?.roles.cache.get(profile.currentRoleId)?.name : "Unknown Role";
-    
-    const ratingSum = profile.ratingSum ?? 0;
-    const ratingCount = profile.ratingCount ?? 0;
+    const ratingSum = profile?.ratingSum ?? 0;
+    const ratingCount = profile?.ratingCount ?? 0;
     const rating = ratingCount > 0 ? (ratingSum / ratingCount).toFixed(1) : "N/A";
-    const stars = ratingCount > 0 ? "⭐".repeat(Math.round(ratingSum / ratingCount)) : "No ratings yet";
-
-    const q = await getQuota(interaction.guildId, targetId);
-    const currentWeek = q.weekly.find(w => w.weekStart === currentWeekStart(0));
-    const msgs = currentWeek?.messages ?? 0;
-
-    const warnings = getActiveInfractions(profile, "warning").length;
-    const strikes = getActiveInfractions(profile, "strike").length;
-
+    
     const embed = new EmbedBuilder()
-      .setTitle(`Public Profile — ${member.user.username}`)
+      .setTitle(`Staff Profile: ${member.user.username}`)
       .setThumbnail(member.user.displayAvatarURL())
-      .setColor(COLORS.primary)
+      .setColor(0x2b2d31)
       .addFields(
-        { name: "Role", value: role ?? "Unknown", inline: true },
-        { name: "Rating", value: `${stars} (${rating})`, inline: true },
-        { name: "Activity Summary", value: `Messages: **${msgs}**\nWarnings: **${warnings}**\nStrikes: **${strikes}**`, inline: false }
-      )
-      .setFooter({ text: `ID: ${targetId}` });
+        { name: "Average Rating", value: rating !== "N/A" ? `${rating}/10 🌟` : "No ratings yet", inline: true },
+        { name: "Reviews", value: `${ratingCount}`, inline: true }
+      );
+
+    if (profile?.introduction) {
+      embed.addFields({ name: "Introduction", value: profile.introduction, inline: false });
+    }
 
     const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`staff_dir_feedback_${targetId}`)
-        .setLabel("Give Feedback")
+        .setLabel("Rate Staff")
         .setStyle(ButtonStyle.Success)
-        .setEmoji(CE.success.id ?? "📝"),
+        .setEmoji("🌟"),
       new ButtonBuilder()
         .setCustomId(`staff_dir_complaint_${targetId}`)
         .setLabel("File Complaint")
         .setStyle(ButtonStyle.Danger)
-        .setEmoji(CE.error.id ?? "⚠️")
+        .setEmoji("⚠️")
     );
 
-    await interaction.editReply({ embeds: [embed], components: [row] });
-  }
-
-  if (interaction.isButton() && interaction.customId.startsWith("staff_dir_prev_")) {
-    const page = parseInt(interaction.customId.replace("staff_dir_prev_", ""), 10);
-    const msg = await buildPortalMessage(interaction.guild!, page - 1);
-    await interaction.update(msg);
-  }
-
-  if (interaction.isButton() && interaction.customId.startsWith("staff_dir_next_")) {
-    const page = parseInt(interaction.customId.replace("staff_dir_next_", ""), 10);
-    const msg = await buildPortalMessage(interaction.guild!, page + 1);
-    await interaction.update(msg);
+    await interaction.editReply({ content: "", embeds: [embed], components: [row] });
   }
 
   if (interaction.isButton() && interaction.customId.startsWith("staff_dir_feedback_")) {
     const targetId = interaction.customId.replace("staff_dir_feedback_", "");
     const modal = new ModalBuilder()
       .setCustomId(`staff_modal_feedback_${targetId}`)
-      .setTitle("Give Feedback");
+      .setTitle("Rate Staff");
 
     const ratingInput = new TextInputBuilder()
       .setCustomId("rating")
-      .setLabel("Rating (1-5)")
+      .setLabel("Rating (1-10)")
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setMinLength(1)
-      .setMaxLength(1);
+      .setMaxLength(2);
 
     const commentsInput = new TextInputBuilder()
       .setCustomId("comments")
@@ -229,9 +229,7 @@ export async function handlePortalInteraction(interaction: Interaction) {
     await interaction.deferReply({ ephemeral: true });
     const targetId = interaction.customId.replace("staff_modal_feedback_", "");
     
-    // Check 24h cooldown
-    const profiles = await listProfiles(interaction.guildId);
-    const profile = profiles.find(p => p.userId === targetId);
+    const profile = await getProfile(interaction.guildId!, targetId);
     const lastFeedback = profile?.feedbackCooldowns?.[interaction.user.id] ?? 0;
     if (Date.now() - lastFeedback < 24 * 60 * 60 * 1000) {
       await interaction.editReply({ embeds: [errorEmbed("Cooldown Active", "You can only submit feedback or complain about this staff member once every 24 hours.")] });
@@ -242,13 +240,13 @@ export async function handlePortalInteraction(interaction: Interaction) {
     const comments = interaction.fields.getTextInputValue("comments");
     
     let rating = parseInt(ratingStr, 10);
-    if (isNaN(rating) || rating < 1 || rating > 5) {
-      await interaction.editReply({ embeds: [errorEmbed("Invalid Rating", "Please provide a number between 1 and 5.")] });
+    if (isNaN(rating) || rating < 1 || rating > 10) {
+      await interaction.editReply({ embeds: [errorEmbed("Invalid Rating", "Please provide a number between 1 and 10.")] });
       return;
     }
 
-    await addStaffRating(interaction.guildId, targetId, rating);
-    await setFeedbackCooldown(interaction.guildId, targetId, interaction.user.id);
+    await addStaffRating(interaction.guildId!, targetId, rating);
+    await setFeedbackCooldown(interaction.guildId!, targetId, interaction.user.id);
     await logFeedback(interaction, targetId, "Feedback", rating, comments);
     await interaction.editReply({ embeds: [successEmbed("Feedback Submitted", "Thank you! Your feedback has been securely submitted to the management team.")] });
   }
@@ -257,9 +255,7 @@ export async function handlePortalInteraction(interaction: Interaction) {
     await interaction.deferReply({ ephemeral: true });
     const targetId = interaction.customId.replace("staff_modal_complaint_", "");
     
-    // Check 24h cooldown
-    const profiles = await listProfiles(interaction.guildId);
-    const profile = profiles.find(p => p.userId === targetId);
+    const profile = await getProfile(interaction.guildId!, targetId);
     const lastFeedback = profile?.feedbackCooldowns?.[interaction.user.id] ?? 0;
     if (Date.now() - lastFeedback < 24 * 60 * 60 * 1000) {
       await interaction.editReply({ embeds: [errorEmbed("Cooldown Active", "You can only submit feedback or complain about this staff member once every 24 hours.")] });
@@ -268,7 +264,7 @@ export async function handlePortalInteraction(interaction: Interaction) {
 
     const comments = interaction.fields.getTextInputValue("comments");
     
-    await setFeedbackCooldown(interaction.guildId, targetId, interaction.user.id);
+    await setFeedbackCooldown(interaction.guildId!, targetId, interaction.user.id);
     await logFeedback(interaction, targetId, "Complaint", null, comments);
     await interaction.editReply({ embeds: [successEmbed("Complaint Submitted", "Thank you! Your complaint has been securely submitted to the management team.")] });
   }
@@ -296,10 +292,10 @@ async function logFeedback(interaction: Interaction, targetId: string, type: "Fe
     .setTimestamp();
 
   if (rating !== null) {
-    embed.addFields({ name: "Rating", value: `${rating}/5`, inline: true });
+    embed.addFields({ name: "Rating", value: `${rating}/10`, inline: true });
   }
 
-  embed.addFields({ name: "Comments", value: comments, inline: false });
+  embed.addFields({ name: "Comments", value: comments || "No comments provided." });
 
-  await channel.send({ embeds: [embed] }).catch(() => {});
+  await channel.send({ embeds: [embed] }).catch(() => null);
 }

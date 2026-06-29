@@ -211,7 +211,7 @@ const MODULE_DEFS: ModuleDef[] = [
     emoji: CE.information,
     moduleKey: "staffDirectory",
     channelKey: "staffDirectoryLog",
-    description: "Interactive staff list with rating and feedback portal.",
+    description: "Interactive staff list with rating and feedback portal. Use 'Set Permissions' to pick which roles show up in the directory.",
   },
 ];
 
@@ -720,7 +720,7 @@ function moduleActionRows(cfg: GuildConfig, mod: ModuleDef): Row[] {
   actionRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`cfg:mod:setroles:${mod.id}`)
-      .setLabel("Set Permissions")
+      .setLabel(mod.id === "staffDirectory" ? "Set Directory Roles" : "Set Permissions")
       .setStyle(ButtonStyle.Secondary)
       .setEmoji(CE.admin.str),
   );
@@ -2894,7 +2894,7 @@ const command: SlashCommand = {
           }
           if (!i.guild) return;
           
-          const payload = await buildPortalMessage(i.guild, 0);
+          const payload = await buildPortalMessage(i.guild);
           if (payload.components.length === 0) {
             await i.reply({ content: `${CE.error.str} The Staff Directory module is disabled.`, flags: 1 << 6 });
             return;
