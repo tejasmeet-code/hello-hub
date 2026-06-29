@@ -28,11 +28,11 @@ export async function buildPortalMessage(guild: Guild, page: number) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle("BetterDark Staff Directory & Feedback Portal")
+    .setTitle(`${CE.staff?.str || "👥"} ${guild.name} Staff Directory & Feedback Portal`)
     .setDescription(
-      `Welcome to the Staff Directory! Use the dropdown menu below to view public profiles of our active staff members.\n\n` +
-      `You can also use this portal to submit feedback, file complaints, or report issues directly to the server management.\n\n` +
-      `**All submissions are securely logged and reviewed by Server Administrators.**`
+      `${CE.information?.str || "ℹ️"} Welcome to the **Staff Directory**! Use the dropdown menu below to view public profiles of our active staff members.\n\n` +
+      `${CE.moderation?.str || "🛡️"} You can also use this portal to submit feedback, file complaints, or report issues directly to the server management.\n\n` +
+      `${CE.admin?.str || "⚙️"} **All submissions are securely logged and reviewed by Server Administrators.**`
     )
     .setColor(0x2b2d31)
     .setImage("https://files.catbox.moe/uul77u.png");
