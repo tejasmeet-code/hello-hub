@@ -13,9 +13,9 @@ import { getGuildCommands } from "../registry";
 import { COLORS, CE, EMOJI } from "../utils/embedStyle";
 
 const CATEGORIES = [
-  { id: "overview", label: "Overview & Help", emoji: "🏠", desc: "Main menu", commands: [] },
-  { id: "setup", label: "Setup Guide", emoji: "🛠️", desc: "How to setup the bot", commands: [] },
-  { id: "faq", label: "FAQ", emoji: "❓", desc: "Frequently Asked Questions", commands: [] },
+  { id: "overview", label: "Overview & Help", emoji: CE.information.str, desc: "Main menu", commands: [] },
+  { id: "setup", label: "Setup Guide", emoji: CE.settings.str, desc: "How to setup the bot", commands: [] },
+  { id: "faq", label: "FAQ", emoji: CE.clipboard.str, desc: "Frequently Asked Questions", commands: [] },
   { id: "mod", label: "Moderation", emoji: CE.moderation.str, desc: "Tools to keep your server safe", commands: ["ban", "kick", "mute", "unmute", "warn", "unwarn", "timeout", "untimeout", "jail", "unjail", "case", "edit-case", "modhistory", "purge", "lock", "unlock", "slowmode", "nuke", "appeal"] },
   { id: "staff", label: "Staff & Admin", emoji: CE.admin.str, desc: "Server configuration and staff tracking", commands: ["config", "bot-admin", "ai-admin", "loa", "staff-report", "promote", "demote", "staff-roles", "bot-check", "maintenance", "whitelist", "whitelist-global", "verify-owner", "setup"] },
   { id: "economy", label: "Economy & Levels", emoji: CE.cash.str, desc: "Ranks, shop, and currency", commands: ["rank", "leaderboard", "give-xp", "slots"] },
@@ -65,18 +65,18 @@ const command: SlashCommand = {
           .setTitle(`Relosta Bot Help Menu`)
           .setColor(COLORS.primary)
           .setDescription(`Relosta Bot is the only moderation and utility bot you'll ever need! Explore its features and configure the best systems for your server!\n\n` +
-            `**>_ Commands**\n` +
+            `**${CE.folder.str} Commands**\n` +
             `> Browse through Relosta Bot's\n> command categories in the dropdown\n> below to find new utilities!\n\n` +
-            `**💬 FAQ**\n` +
+            `**${CE.information.str} FAQ**\n` +
             `> Solutions for the most frequent\n> questions our users have when\n> implementing the bot on their\n> server.\n\n` +
-            `**⚙️ Setup**\n` +
+            `**${CE.settings.str} Setup**\n` +
             `> The steps to follow when\n> setting the bot up for the first time on\n> any server.`)
           .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
       }
 
       if (categoryId === "setup") {
         return new EmbedBuilder()
-          .setTitle(`🛠️ Relosta Bot Setup Guide`)
+          .setTitle(`${CE.settings.str} Relosta Bot Setup Guide`)
           .setColor(COLORS.primary)
           .setDescription(`Follow these steps to fully configure Relosta Bot for your server:\n\n` + 
             `**1. Configuration Menu**\n` + 
@@ -92,7 +92,7 @@ const command: SlashCommand = {
 
       if (categoryId === "faq") {
         return new EmbedBuilder()
-          .setTitle(`❓ Frequently Asked Questions`)
+          .setTitle(`${CE.clipboard.str} Frequently Asked Questions`)
           .setColor(COLORS.primary)
           .setDescription(`**Q: Why is the bot saying "Interaction Failed"?**\n` +
             `A: This usually means the bot restarted recently and the old buttons/menus in chat have expired. Just re-run the command to get a fresh menu.\n\n` +
