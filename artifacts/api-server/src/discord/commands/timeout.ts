@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import type { SlashCommand } from "../types";
 import { ensureWhitelisted } from "../utils/gate";
-import { prettyEmbed, buildBullets, COLORS, CE, errorEmbed } from "../utils/embedStyle";
+import { prettyEmbed, buildBullets, COLORS, CE, errorEmbed, modActionEmbed } from "../utils/embedStyle";
 import { recordModStat } from "../storage/modstats";
 import { getGuildConfig, getModerationConfig } from "../storage/config";
 import { bumpModAction } from "../storage/quota";
@@ -91,19 +91,19 @@ const command: SlashCommand = {
 
     const until = Math.floor((Date.now() + ms) / 1000);
     await interaction.editReply({
-      embeds: [prettyEmbed({
-        title: caseNumber ? `Timed out — Case #${caseNumber}` : "Timed out",
-        description: `${CE.success.str}\n\n${buildBullets([
-          { label: "User",     value: target.tag },
-          { label: "Duration", value: durationInput },
-          { label: "Until",    value: `<t:${until}:R>` },
-          { label: "Reason",   value: reason },
+      embeds: [modActionEmbed({
+        action: caseNumber ? `Timeout (Case #${caseNumber})` : "Timeout",
+        target,
+        moderator: interaction.user,
+        duration: durationInput,
+        reason,
+        extraFields: [
+          { label: "Until", value: `<t:${until}:R>` },
           ...(!dmSent ? [{ label: "Note", value: `${CE.warning.str} Could not DM the user` }] : []),
-        ])}`,
-        thumbnail: target.displayAvatarURL({ size: 256 }),
-        color: COLORS.success,
-        footer: caseNumber ? `Case #${caseNumber}` : "Timeout recorded",
-      })],
+        ],
+        emoji: "⏳",
+        color: COLORS.success
+      })]
     });
 
     const modChannelId = cfg.channels.moderation;
@@ -111,20 +111,18 @@ const command: SlashCommand = {
       const modChannel = await interaction.guild.channels.fetch(modChannelId).catch(() => null);
       if (modChannel && modChannel.type === ChannelType.GuildText) {
         await (modChannel as GuildTextBasedChannel).send({
-          embeds: [prettyEmbed({
-            title: `Timeout`,
-            description: `${CE.moderation.str}\n\n${buildBullets([
-              { label: "User",      value: `<@${target.id}> — ${target.tag}` },
-              { label: "Moderator", value: `<@${interaction.user.id}>` },
-              { label: "Duration",  value: durationInput },
-              { label: "Until",     value: `<t:${until}:R>` },
-              { label: "Reason",    value: reason },
+          embeds: [modActionEmbed({
+            action: caseNumber ? `Timeout (Case #${caseNumber})` : "Timeout",
+            target,
+            moderator: interaction.user,
+            duration: durationInput,
+            reason,
+            extraFields: [
+              { label: "Until", value: `<t:${until}:R>` },
               ...(proof ? [{ label: "Proof", value: proof }] : []),
-            ])}`,
-            thumbnail: target.displayAvatarURL({ size: 256 }),
-            color: COLORS.warning,
-            footer: "Relosta Bot",
-          })],
+            ],
+            color: COLORS.warning
+          })]
         }).catch(() => {});
       }
     }

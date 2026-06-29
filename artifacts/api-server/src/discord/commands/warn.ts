@@ -14,7 +14,7 @@ import { ensureWhitelisted } from "../utils/gate";
 import { createCase } from "../storage/cases";
 import { getGuildConfig, getModerationConfig } from "../storage/config";
 import { sendPunishmentDM } from "../utils/punishDM";
-import { buildBullets, CE, COLORS, prettyEmbed } from "../utils/embedStyle";
+import { buildBullets, CE, COLORS, prettyEmbed, modActionEmbed } from "../utils/embedStyle";
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -117,19 +117,19 @@ const command: SlashCommand = {
       }) : false;
 
       await interaction.reply({
-        embeds: [prettyEmbed({
-          title: caseNumber ? `Warned — Case #${caseNumber}` : "Warned",
-          description: `${CE.warning.str}\n\n${buildBullets([
-            { label: "User", value: target.tag },
-            { label: "Reason", value: reason },
+        embeds: [modActionEmbed({
+          action: caseNumber ? `Warn (Case #${caseNumber})` : "Warn",
+          target,
+          moderator: interaction.user,
+          reason,
+          extraFields: [
             { label: "Warnings", value: `${total}` },
             ...(!dmSent ? [{ label: "Note", value: `${CE.warning.str} Could not DM the user` }] : []),
-          ])}`,
-          thumbnail: target.displayAvatarURL({ size: 256 }),
-          color: COLORS.warning,
-          footer: caseNumber ? `Case #${caseNumber}` : `Warning ${warning.id}`,
+          ],
+          emoji: CE.warning.str,
+          color: COLORS.warning
         })],
-        ephemeral: true,
+        ephemeral: false // as per the previous refactor to make embeds public
       });
 
       const modChannelId = cfg.channels.moderation;
@@ -137,18 +137,14 @@ const command: SlashCommand = {
         const modChannel = await interaction.guild.channels.fetch(modChannelId).catch(() => null);
         if (modChannel && modChannel.type === ChannelType.GuildText) {
           await (modChannel as GuildTextBasedChannel).send({
-            embeds: [prettyEmbed({
-              title: `Warning${caseNumber ? ` — Case #${caseNumber}` : ""}`,
-              description: `${CE.warning.str}\n\n${buildBullets([
-                { label: "User",      value: `<@${target.id}> — ${target.tag}` },
-                { label: "Moderator", value: `<@${interaction.user.id}>` },
-                { label: "Reason",    value: reason },
-                { label: "Total warnings", value: String(total) },
-              ])}`,
-              thumbnail: target.displayAvatarURL({ size: 256 }),
-              color: COLORS.warning,
-              footer: caseNumber ? `Case #${caseNumber} • Relosta Bot` : "Relosta Bot",
-            })],
+            embeds: [modActionEmbed({
+              action: caseNumber ? `Warn (Case #${caseNumber})` : "Warn",
+              target,
+              moderator: interaction.user,
+              reason,
+              extraFields: [{ label: "Total warnings", value: String(total) }],
+              color: COLORS.warning
+            })]
           }).catch(() => {});
         }
       }

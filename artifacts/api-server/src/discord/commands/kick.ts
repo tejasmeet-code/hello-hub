@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import type { SlashCommand } from "../types";
 import { ensureWhitelisted } from "../utils/gate";
-import { prettyEmbed, buildBullets, COLORS, CE, errorEmbed } from "../utils/embedStyle";
+import { prettyEmbed, buildBullets, COLORS, CE, errorEmbed, modActionEmbed } from "../utils/embedStyle";
 import { propagatePunishment, formatPropagationResults } from "../utils/crossServer";
 import { recordModStat } from "../storage/modstats";
 import { getGuildConfig, getModerationConfig } from "../storage/config";
@@ -75,23 +75,21 @@ const command: SlashCommand = {
     await recordModStat({ guildId: interaction.guildId, modId: interaction.user.id, targetId: target.id, action: "kick", delta: 1, reason });
     await bumpModAction(interaction.guildId, interaction.user.id, cfg.quotaConfig?.weekStartDay ?? 0);
 
-    const label = caseNumber ? `Kicked — Case #${caseNumber}` : "Kicked";
-    const replyBullets: { label: string; value: string }[] = [
-      { label: "User", value: target.tag },
-      { label: "Reason", value: reason },
-    ];
     const crossNote = formatPropagationResults(crossResults);
-    if (crossNote) replyBullets.push({ label: "Cross-server", value: crossNote });
-    if (!dmSent) replyBullets.push({ label: "Note", value: `${CE.warning.str} Could not DM the user` });
 
     await interaction.editReply({
-      embeds: [prettyEmbed({
-        title: label,
-        description: `${CE.success.str}\n\n${buildBullets(replyBullets)}`,
-        thumbnail: target.displayAvatarURL({ size: 256 }),
-        color: COLORS.success,
-        footer: caseNumber ? `Case #${caseNumber}` : "Kick recorded",
-      })],
+      embeds: [modActionEmbed({
+        action: caseNumber ? `Kick (Case #${caseNumber})` : "Kick",
+        target,
+        moderator: interaction.user,
+        reason,
+        extraFields: [
+          ...(proof ? [{ label: "Proof", value: proof }] : []),
+          ...(!dmSent ? [{ label: "Note", value: `${CE.warning.str} Could not DM the user` }] : []),
+          ...(crossNote ? [{ label: "Cross-server", value: crossNote }] : [])
+        ],
+        emoji: CE.kick?.str || CE.ban.str
+      })]
     });
 
     const modChannelId = cfg.channels.moderation;
@@ -99,18 +97,13 @@ const command: SlashCommand = {
       const modChannel = await interaction.guild.channels.fetch(modChannelId).catch(() => null);
       if (modChannel && modChannel.type === ChannelType.GuildText) {
         await (modChannel as GuildTextBasedChannel).send({
-          embeds: [prettyEmbed({
-            title: `Kick${caseNumber ? ` — Case #${caseNumber}` : ""}`,
-            description: `${CE.moderation.str}\n\n${buildBullets([
-              { label: "User",      value: `<@${target.id}> — ${target.tag}` },
-              { label: "Moderator", value: `<@${interaction.user.id}>` },
-              { label: "Reason",    value: reason },
-              ...(proof ? [{ label: "Proof", value: proof }] : []),
-            ])}`,
-            thumbnail: target.displayAvatarURL({ size: 256 }),
-            color: COLORS.danger,
-            footer: caseNumber ? `Case #${caseNumber} • Relosta Bot` : "Relosta Bot",
-          })],
+          embeds: [modActionEmbed({
+            action: caseNumber ? `Kick (Case #${caseNumber})` : "Kick",
+            target,
+            moderator: interaction.user,
+            reason,
+            extraFields: proof ? [{ label: "Proof", value: proof }] : []
+          })]
         }).catch(() => {});
       }
     }

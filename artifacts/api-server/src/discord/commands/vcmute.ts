@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import type { SlashCommand } from "../types";
 import { ensureWhitelisted } from "../utils/gate";
-import { prettyEmbed, buildBullets, COLORS, CE, errorEmbed } from "../utils/embedStyle";
+import { prettyEmbed, buildBullets, COLORS, CE, errorEmbed, modActionEmbed } from "../utils/embedStyle";
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -41,16 +41,17 @@ const command: SlashCommand = {
     }
 
     await interaction.editReply({
-      embeds: [prettyEmbed({
-        title: mute ? "VC Muted" : "VC Unmuted",
-        description: `${CE.success.str}\n\n${buildBullets([
-          { label: "User",    value: `<@${target.id}> — ${target.tag}` },
-          { label: "Channel", value: `<#${member.voice.channel.id}>` },
-          { label: "Reason",  value: reason },
-        ])}`,
-        thumbnail: target.displayAvatarURL({ size: 256 }),
-        color: mute ? COLORS.warning : COLORS.success,
-      })],
+      embeds: [modActionEmbed({
+        action: mute ? "VC Mute" : "VC Unmute",
+        target,
+        moderator: interaction.user,
+        reason,
+        extraFields: [
+          { label: "Channel", value: `<#${member.voice.channel.id}>` }
+        ],
+        emoji: mute ? CE.timeout?.str || "🔇" : CE.success.str,
+        color: mute ? COLORS.warning : COLORS.success
+      })]
     });
   },
 };

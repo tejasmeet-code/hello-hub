@@ -243,3 +243,67 @@ export function infoEmbed(title: string, description?: string): EmbedBuilder {
     color: COLORS.info,
   });
 }
+
+export interface ModActionOpts {
+  action: string;
+  target: { tag: string; id: string; displayAvatarURL: (opts?: any) => string };
+  moderator?: { tag: string; id: string };
+  reason?: string;
+  duration?: string;
+  color?: ColorResolvable;
+  emoji?: string;
+  extraFields?: { label: string; value: string }[];
+}
+
+export function modActionEmbed(opts: ModActionOpts): EmbedBuilder {
+  const e = new EmbedBuilder()
+    .setAuthor({ name: `${opts.action} | ${opts.target.tag}`, iconURL: opts.target.displayAvatarURL({ size: 128 }) })
+    .setColor(opts.color ?? COLORS.danger)
+    .setDescription(
+      buildBullets([
+        { label: "Target", value: `<@${opts.target.id}> (\`${opts.target.id}\`)` },
+        ...(opts.moderator ? [{ label: "Moderator", value: `<@${opts.moderator.id}>` }] : []),
+        ...(opts.duration ? [{ label: "Duration", value: opts.duration }] : []),
+        { label: "Reason", value: opts.reason || "No reason provided." },
+        ...(opts.extraFields || [])
+      ])
+    )
+    .setFooter({ text: "Relosta Bot • Moderation" })
+    .setTimestamp(new Date());
+    
+  if (opts.emoji) {
+    e.setTitle(`${opts.emoji} Action Executed`);
+  }
+  return e;
+}
+
+export interface UserActionOpts {
+  title: string;
+  target: { tag: string; id: string; displayAvatarURL: (opts?: any) => string };
+  description?: string;
+  fields?: { label: string; value: string }[];
+  color?: ColorResolvable;
+  emoji?: string;
+  footer?: string;
+}
+
+export function userActionEmbed(opts: UserActionOpts): EmbedBuilder {
+  const e = new EmbedBuilder()
+    .setAuthor({ name: opts.target.tag, iconURL: opts.target.displayAvatarURL({ size: 128 }) })
+    .setTitle(`${opts.emoji ? opts.emoji + ' ' : ''}${opts.title}`)
+    .setColor(opts.color ?? COLORS.primary);
+    
+  let desc = "";
+  if (opts.description) desc += opts.description + "\n\n";
+  if (opts.fields && opts.fields.length > 0) {
+    desc += buildBullets(opts.fields);
+  }
+  if (desc) e.setDescription(desc);
+  
+  if (opts.footer) {
+    e.setFooter({ text: opts.footer });
+  }
+  
+  e.setTimestamp(new Date());
+  return e;
+}

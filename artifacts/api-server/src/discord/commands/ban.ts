@@ -10,7 +10,7 @@ import { ensureWhitelisted } from "../utils/gate";
 import { createCase } from "../storage/cases";
 import { getGuildConfig, getModerationConfig } from "../storage/config";
 import { sendPunishmentDM } from "../utils/punishDM";
-import { buildBullets, CE, COLORS, prettyEmbed, errorEmbed } from "../utils/embedStyle";
+import { buildBullets, CE, COLORS, prettyEmbed, errorEmbed, modActionEmbed } from "../utils/embedStyle";
 import { recordModStat } from "../storage/modstats";
 import { logger } from "../../lib/logger";
 
@@ -162,21 +162,19 @@ const command: SlashCommand = {
       await bumpModAction(interaction.guildId!, interaction.user.id, cfg?.quotaConfig?.weekStartDay ?? 0);
 
       const crossNote = formatPropagationResults(crossResults);
-      const bullets = [
-        { label: "User", value: target.tag },
-        { label: "Reason", value: reason },
-        ...(proof ? [{ label: "Proof", value: proof }] : []),
-        ...(!dmSent ? [{ label: "Note", value: `${CE.warning.str} Could not DM the user` }] : []),
-        ...(crossNote ? [{ label: "Cross-server", value: crossNote }] : []),
-      ];
       await interaction.editReply({
-        embeds: [prettyEmbed({
-          title: caseNumber ? `Banned — Case #${caseNumber}` : "Banned",
-          description: `${CE.moderation.str}\n\n${buildBullets(bullets)}`,
-          thumbnail: target.displayAvatarURL({ size: 256 }),
-          color: COLORS.danger,
-          footer: caseNumber ? `Case #${caseNumber}` : "Ban recorded",
-        })],
+        embeds: [modActionEmbed({
+          action: caseNumber ? `Ban (Case #${caseNumber})` : "Ban",
+          target,
+          moderator: interaction.user,
+          reason,
+          extraFields: [
+            ...(proof ? [{ label: "Proof", value: proof }] : []),
+            ...(!dmSent ? [{ label: "Note", value: `${CE.warning.str} Could not DM the user` }] : []),
+            ...(crossNote ? [{ label: "Cross-server", value: crossNote }] : [])
+          ],
+          emoji: CE.ban.str
+        })]
       });
 
       const modChannelId = cfg?.channels?.moderation;

@@ -12,7 +12,7 @@ import { bumpModAction } from "../storage/quota";
 import { getGuildConfig, getModerationConfig } from "../storage/config";
 import { createCase } from "../storage/cases";
 import { sendPunishmentDM } from "../utils/punishDM";
-import { COLORS, CE, prettyEmbed, buildBullets, successEmbed, errorEmbed } from "../utils/embedStyle";
+import { COLORS, CE, prettyEmbed, buildBullets, successEmbed, errorEmbed, modActionEmbed } from "../utils/embedStyle";
 import { propagatePunishment, formatPropagationResults } from "../utils/crossServer";
 
 const command: SlashCommand = {
@@ -98,25 +98,24 @@ const command: SlashCommand = {
     await recordModStat({ guildId: interaction.guildId, modId: interaction.user.id, targetId: target.id, action: "jail", delta: 1, reason });
     await bumpModAction(interaction.guildId, interaction.user.id, cfg.quotaConfig?.weekStartDay ?? 0);
 
-    const label = caseNumber ? `Jailed — Case #${caseNumber}` : "Jailed";
-    const replyBullets: { label: string; value: string }[] = [
-      { label: "User",   value: target.tag },
-      { label: "Reason", value: reason },
-    ];
-    if (removed > 0)        replyBullets.push({ label: "Roles stripped", value: `${removed}` });
-    if (couldNotRemove > 0) replyBullets.push({ label: "Could not strip", value: `${CE.warning.str} ${couldNotRemove} role${couldNotRemove === 1 ? "" : "s"}` });
+    const label = caseNumber ? `Jail (Case #${caseNumber})` : "Jail";
+    const extraFields: { label: string; value: string }[] = [];
+    if (removed > 0)        extraFields.push({ label: "Roles stripped", value: `${removed}` });
+    if (couldNotRemove > 0) extraFields.push({ label: "Could not strip", value: `${CE.warning.str} ${couldNotRemove} role${couldNotRemove === 1 ? "" : "s"}` });
     const crossNote = formatPropagationResults(crossResults);
-    if (crossNote) replyBullets.push({ label: "Cross-server", value: crossNote });
-    if (!dmSent)            replyBullets.push({ label: "Note", value: `${CE.warning.str} Could not DM the user (DMs may be disabled)` });
+    if (crossNote) extraFields.push({ label: "Cross-server", value: crossNote });
+    if (!dmSent)            extraFields.push({ label: "Note", value: `${CE.warning.str} Could not DM the user (DMs may be disabled)` });
 
     await interaction.editReply({
-      embeds: [prettyEmbed({
-        title:       label,
-        description: `${CE.success.str}\n\n${buildBullets(replyBullets)}`,
-        thumbnail:   target.displayAvatarURL({ size: 256 }),
-        color:       COLORS.success,
-        footer:      caseNumber ? `Case #${caseNumber}` : "Jail recorded",
-      })],
+      embeds: [modActionEmbed({
+        action: label,
+        target,
+        moderator: interaction.user,
+        reason,
+        extraFields,
+        emoji: CE.role?.str || "🚔",
+        color: COLORS.success
+      })]
     });
 
     // Post to moderation log channel
@@ -125,18 +124,14 @@ const command: SlashCommand = {
       const modChannel = await interaction.guild.channels.fetch(modChannelId).catch(() => null);
       if (modChannel && modChannel.type === ChannelType.GuildText) {
         await (modChannel as GuildTextBasedChannel).send({
-          embeds: [prettyEmbed({
-            title:       `Jail${caseNumber ? ` — Case #${caseNumber}` : ""}`,
-            description: `${CE.moderation.str}\n\n${buildBullets([
-              { label: "User",      value: `<@${target.id}> — ${target.tag}` },
-              { label: "Moderator", value: `<@${interaction.user.id}>` },
-              { label: "Reason",    value: reason },
-              ...(proof ? [{ label: "Proof", value: proof }] : []),
-            ])}`,
-            thumbnail: target.displayAvatarURL({ size: 256 }),
-            color:  COLORS.neutral,
-            footer: caseNumber ? `Case #${caseNumber} • Relosta Bot` : "Relosta Bot",
-          })],
+          embeds: [modActionEmbed({
+            action: label,
+            target,
+            moderator: interaction.user,
+            reason,
+            extraFields: proof ? [{ label: "Proof", value: proof }] : [],
+            color: COLORS.neutral
+          })]
         }).catch(() => {});
       }
     }
