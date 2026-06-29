@@ -10,6 +10,7 @@ import {
   type Interaction,
   type MessageActionRowComponentBuilder,
   type Guild,
+  MessageFlags,
 } from "discord.js";
 import { getGuildConfig } from "../storage/config";
 import { CE, COLORS } from "../utils/embedStyle";
@@ -62,6 +63,16 @@ export async function handlePortalInteraction(interaction: Interaction) {
       await interaction.reply({ embeds: [errorEmbed("Configuration Error", "No Staff Roles have been configured for the portal. An admin needs to set permissions in `/config`.")], ephemeral: true });
       return;
     }
+    // The main portal message is not ephemeral. The pagination messages are ephemeral.
+    const isEphemeral = interaction.message.flags.has(MessageFlags.Ephemeral);
+    if (isEphemeral) {
+      await interaction.deferUpdate();
+    } else {
+      await interaction.deferReply({ ephemeral: true });
+    }
+
+    // Fetch all members to ensure role.members is accurate
+    await interaction.guild?.members.fetch();
 
     const activeStaff: { userId: string; roleName: string }[] = [];
     for (const rId of portalRoleIds) {
@@ -124,11 +135,11 @@ export async function handlePortalInteraction(interaction: Interaction) {
       components.push(row2);
     }
     
-    // We update if they paginated, or reply if they just clicked the first button
-    if (interaction.deferred || interaction.replied) {
+    
+    if (isEphemeral) {
       await interaction.editReply({ content: "Select a staff member from the dropdown below:", components });
     } else {
-      await interaction.reply({ content: "Select a staff member from the dropdown below:", components, ephemeral: true });
+      await interaction.editReply({ content: "Select a staff member from the dropdown below:", components });
     }
   }
 
