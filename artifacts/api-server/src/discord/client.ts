@@ -200,6 +200,16 @@ export async function startDiscordBot(): Promise<void> {
   // Handle button and slash command interactions
   // ────────────────────────────────────────────────────────────────────
   client.on(Events.InteractionCreate, async (interaction) => {
+    if ((interaction.isMessageComponent() || interaction.isModalSubmit()) && (interaction.customId.startsWith("staff_dir_") || interaction.customId.startsWith("staff_modal_"))) {
+      const { handlePortalInteraction } = await import("./handlers/portalHandler");
+      try {
+        await handlePortalInteraction(interaction);
+      } catch (err) {
+        logger.error({ err }, "Error handling portal interaction");
+      }
+      return;
+    }
+
     if (interaction.isButton()) {
       if (interaction.customId.startsWith("appeal:")) {
         const { handleAppealButton, handleAppealReviewButton } = await import("./utils/appealHandler");

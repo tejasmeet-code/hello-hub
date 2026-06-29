@@ -204,6 +204,21 @@ const MODULE_DEFS: ModuleDef[] = [
     channelKey: null,
     description: "Maintenance mode — creates a restricted category and lets you swap member roles with a button.",
   },
+  {
+    id: "staffDirectoryLog",
+    label: "Staff Feedback Log",
+    desc: "Where staff ratings and feedback are sent",
+    key: "staffDirectoryLog",
+    emoji: CE.information.str,
+  },
+  {
+    id: "staffDirectory",
+    label: "Staff Directory & Feedback",
+    emoji: CE.information,
+    moduleKey: "staffDirectory",
+    channelKey: "staffDirectoryLog",
+    description: "Interactive staff list with rating and feedback portal.",
+  },
 ];
 
 /** Modules that have custom per-module settings beyond channel/roles. */
@@ -422,7 +437,7 @@ function shopMiniRows(shop: ShopMiniConfig): Row[] {
 const CONFIG_CATEGORIES = [
   { id: "setup", label: "General & Setup", emoji: CE.settings.str, desc: "Prefix, Bot Profile, Welcomer, Levels", items: ["prefix", "botProfile", "welcomer", "levels"] },
   { id: "mod", label: "Moderation & Security", emoji: CE.moderation.str, desc: "Automod, Infractions, Anti-Nuke, Role Memory", items: ["moderation", "infractions", "automod", "antiNuke", "banRequest", "roleMemory", "appeals"] },
-  { id: "staff", label: "Staff Management", emoji: CE.staff.str, desc: "Staff tracking, Promotions, Demotions, LOA", items: ["staff", "promotions", "demotions", "performance", "staffReport", "quota", "loa"] },
+  { id: "staff", label: "Staff Management", emoji: CE.staff.str, desc: "Staff tracking, Promotions, Demotions, LOA", items: ["staff", "promotions", "demotions", "performance", "staffReport", "quota", "loa", "staffDirectory"] },
   { id: "utils", label: "Utilities & Features", emoji: CE.folder.str, desc: "Tickets, Shop, Verify, Server Maintenance", items: ["tickets", "shop", "partnership", "verify", "serverMaintenance", "botNotifications"] },
 ];
 

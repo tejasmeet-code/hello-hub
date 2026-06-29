@@ -46,6 +46,9 @@ export interface StaffProfile {
   terminated: boolean;
   terminatedAt?: number;
   partnershipScore: number;
+  ratingSum?: number;
+  ratingCount?: number;
+  feedbackCooldowns?: Record<string, number>;
 }
 
 export interface GuildStaff {
@@ -168,7 +171,7 @@ export async function listProfiles(guildId: string): Promise<StaffProfile[]> {
 }
 
 function newProfile(userId: string, now: number): StaffProfile {
-  return { userId, firstJoinedAt: now, currentRoleId: null, positionHistory: [], promotions: [], demotions: [], infractions: [], terminated: false, partnershipScore: 0 };
+  return { userId, firstJoinedAt: now, currentRoleId: null, positionHistory: [], promotions: [], demotions: [], infractions: [], terminated: false, partnershipScore: 0, ratingSum: 0, ratingCount: 0, feedbackCooldowns: {} };
 }
 
 export async function syncProfileFromMember(guildId: string, member: GuildMember): Promise<{ created: boolean; changed: boolean; profile: StaffProfile | null }> {
@@ -357,4 +360,34 @@ export async function incrementPartnershipScore(guildId: string, userId: string)
   profile.partnershipScore += 1;
   await queueWrite(data);
   return profile;
+}
+
+export async function addStaffRating(guildId: string, userId: string, rating: number): Promise<StaffProfile | null> {
+  const data = await load();
+  const g = data[guildId];
+  if (!g) return null;
+  const profile = g.profiles[userId];
+  if (!profile) return null;
+  
+  if (typeof profile.ratingSum !== "number") profile.ratingSum = 0;
+  if (typeof profile.ratingCount !== "number") profile.ratingCount = 0;
+  
+  profile.ratingSum += rating;
+  profile.ratingCount += 1;
+  
+  await queueWrite(data);
+  return profile;
+}
+
+export async function setFeedbackCooldown(guildId: string, staffId: string, submitterId: string): Promise<void> {
+  const data = await load();
+  const g = data[guildId];
+  if (!g) return;
+  const profile = g.profiles[staffId];
+  if (!profile) return;
+  
+  if (!profile.feedbackCooldowns) profile.feedbackCooldowns = {};
+  profile.feedbackCooldowns[submitterId] = Date.now();
+  
+  await queueWrite(data);
 }

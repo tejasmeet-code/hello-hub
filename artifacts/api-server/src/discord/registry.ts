@@ -20,6 +20,7 @@ import choice from "./commands/choice";
 import closeTicket from "./commands/close-ticket";
 import coinflip from "./commands/coinflip";
 import config from "./commands/config";
+import portal from "./commands/portal";
 import connectServers from "./commands/connect-servers";
 import connect4 from "./commands/connect4";
 import cursedNicknames from "./commands/cursedNicknames";

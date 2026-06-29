@@ -23,6 +23,7 @@ export interface GuildModules {
   antiNuke: boolean;
   serverMaintenance: boolean;
   automations?: boolean;
+  staffDirectory?: boolean;
 }
 
 export interface GuildChannels {
@@ -43,6 +44,7 @@ export interface GuildChannels {
   staffLog?: string;
   quotaLog?: string;
   roleMemoryLog?: string;
+  staffDirectoryLog?: string;
 }
 
 export interface StaffReportState {
@@ -203,7 +205,7 @@ const DEFAULTS: GuildConfig = {
     staffMgmt: true, quota: true, auditLog: true, moderation: true,
     infractions: true, appeals: true, loa: true, partnership: true,
     verify: true, banRequest: true, roleMemory: true, antiNuke: false,
-    serverMaintenance: false,
+    serverMaintenance: false, staffDirectory: false,
   },
   channels: {},
   moduleRoles: {},
@@ -332,6 +334,7 @@ function withDefaults(c: Partial<GuildConfig> | undefined): GuildConfig {
       roleMemory:        c?.modules?.roleMemory        ?? true,
       antiNuke:          c?.modules?.antiNuke          ?? false,
       serverMaintenance: c?.modules?.serverMaintenance ?? false,
+      staffDirectory:    c?.modules?.staffDirectory    ?? false,
     },
     channels: { ...(c?.channels ?? {}) },
     moduleRoles:         { ...(c?.moduleRoles ?? {}) },
