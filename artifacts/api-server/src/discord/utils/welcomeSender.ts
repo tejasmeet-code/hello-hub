@@ -39,7 +39,7 @@ export function buildWelcomerEmbed(
   guild: Guild,
   count: number,
 ): EmbedBuilder {
-  const eb = new EmbedBuilder().setColor(embedCfg.color ?? 0x5865f2);
+  const eb = new EmbedBuilder().setColor(embedCfg.color ?? 0x2b2d31);
   const rawTitle = embedCfg.title
     ? applyWelcomerPlaceholders(embedCfg.title, user, guild, count)
     : `Welcome to ${guild.name}!`;

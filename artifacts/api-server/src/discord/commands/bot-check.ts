@@ -89,7 +89,7 @@ const command: SlashCommand = {
     
     // 1. Latency check
     const wsPing = client.ws.ping;
-    let wsEmoji = CE.success.str;
+    let wsEmoji: string = CE.success.str;
     if (wsPing > 500) wsEmoji = CE.error.str;
     else if (wsPing > 200) wsEmoji = CE.warning.str;
 
@@ -117,7 +117,7 @@ const command: SlashCommand = {
 
     const embed = new EmbedBuilder()
       .setTitle(`${CE.admin.str} System Diagnostics: ${client.user?.tag}`)
-      .setColor(hasAdmin && !dbStatus.includes("Error") ? COLORS.success : COLORS.error)
+      .setColor(hasAdmin && !dbStatus.includes("Error") ? COLORS.success : COLORS.danger)
       .addFields(
         { name: "WebSocket Ping", value: `${wsEmoji} \`${wsPing}ms\``, inline: true },
         { name: "Database Latency", value: dbStatus.includes("Error") ? dbStatus : `${CE.success.str} \`${dbTime}ms\``, inline: true },

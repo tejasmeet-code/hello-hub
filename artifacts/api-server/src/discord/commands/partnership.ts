@@ -249,7 +249,7 @@ export async function handlePartnershipButton(interaction: ButtonInteraction) {
           const announcementEmbed = new EmbedBuilder()
             .setTitle("Server Ads")
             .setDescription(submission.message)
-            .setColor(0x5865f2)
+            .setColor(0x2b2d31)
             .setTimestamp();
           
           await channel.send({ embeds: [announcementEmbed] });

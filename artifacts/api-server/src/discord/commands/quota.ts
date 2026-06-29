@@ -153,7 +153,7 @@ const command: SlashCommand = {
       const embed = {
         title: `${CE.information.str} Weekly Quota — ${interaction.guild.name}`,
         description: rows.length > 0 ? rows.slice(0, 40).join("\n") : "*No staff members.*",
-        color: 0x5865f2,
+        color: 0x2b2d31,
         footer: {
           text: `${met}/${staffMembers.size} on track this week`,
         },

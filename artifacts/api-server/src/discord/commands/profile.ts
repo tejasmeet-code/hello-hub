@@ -124,7 +124,7 @@ const command: SlashCommand = {
     const embed = buildStaffEmbed({
       title: `${CE.members.str} Staff Profile`,
       target,
-      color: 0x5865f2,
+      color: 0x2b2d31,
       fields,
       footer: profile
         ? `Joined staff <t:${Math.floor(profile.firstJoinedAt / 1000)}:D>`

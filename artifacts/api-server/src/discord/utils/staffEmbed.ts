@@ -16,7 +16,7 @@ export function buildStaffEmbed(opts: StaffEmbedOpts): EmbedBuilder {
       iconURL: opts.target.displayAvatarURL({ size: 128 }),
     })
     .setTitle(opts.title)
-    .setColor(opts.color ?? 0x5865f2)
+    .setColor(opts.color ?? 0x2b2d31)
     .setThumbnail(opts.target.displayAvatarURL({ size: 256 }))
     .setTimestamp(new Date());
   if (opts.description) e.setDescription(opts.description);

@@ -32,7 +32,7 @@ function buildEmbed(
 
   return {
     title: `/${fullCommand}`,
-    color: 0x5865f2,
+    color: 0x2b2d31,
     fields: [
       {
         name: "User",

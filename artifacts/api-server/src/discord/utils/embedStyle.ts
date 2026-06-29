@@ -1,7 +1,7 @@
 import { EmbedBuilder, type APIEmbedField, type ColorResolvable } from "discord.js";
 
 export const COLORS = {
-  primary: 0x5865f2,
+  primary: 0x2b2d31,
   success: 0x57f287,
   warning: 0xfee75c,
   danger:  0xed4245,

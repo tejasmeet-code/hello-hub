@@ -124,7 +124,7 @@ const command: SlashCommand = {
         [...permLines, ...guildLines].join("\n") || "*Nobody yet.*";
       const embed = new EmbedBuilder()
         .setTitle("Whitelist — all restricted commands")
-        .setColor(0x5865f2)
+        .setColor(0x2b2d31)
         .setDescription(description)
         .setFooter({
           text: `${ids.length} server entr${ids.length === 1 ? "y" : "ies"} • ${PERM_WHITELIST.size} global`,

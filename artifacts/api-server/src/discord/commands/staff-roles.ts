@@ -32,7 +32,7 @@ const command: SlashCommand = {
     const lines = roles.map((r) => `**${r.position}.** <@&${r.roleId}>`);
     const embed = new EmbedBuilder()
       .setTitle("Staff Roles")
-      .setColor(0x5865f2)
+      .setColor(0x2b2d31)
       .setDescription(lines.join("\n"))
       .setFooter({ text: `${roles.length} role${roles.length === 1 ? "" : "s"}` });
     await interaction.reply({ embeds: [embed] });

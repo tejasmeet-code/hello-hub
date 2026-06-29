@@ -88,7 +88,7 @@ const command: SlashCommand = {
           ...(!dmSent ? [{ label: "Note", value: `${CE.warning.str} Could not DM the user` }] : []),
           ...(crossNote ? [{ label: "Cross-server", value: crossNote }] : [])
         ],
-        emoji: CE.kick?.str || CE.ban.str
+        emoji: CE.moderation?.str || "👢"
       })]
     });
 

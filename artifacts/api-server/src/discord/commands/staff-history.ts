@@ -121,7 +121,7 @@ const command: SlashCommand = {
     const embed = buildStaffEmbed({
       title: "Staff History",
       target,
-      color: 0x5865f2,
+      color: 0x2b2d31,
       fields,
       description: body,
     });

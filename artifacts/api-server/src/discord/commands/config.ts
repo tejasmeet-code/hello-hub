@@ -45,7 +45,8 @@ import { CE } from "../utils/embedStyle";
 import { isAdminOrOwner } from "../utils/staffPerms";
 import { PERM_WHITELIST } from "../storage/whitelist";
 import { logger } from "../../lib/logger";
-import { addStaffRole, listStaffRoles, removeStaffRole } from "../storage/staff";
+import { addStaffRole, listStaffRoles, removeStaffRole, resetStaffData } from "../storage/staff";
+import { buildPortalMessage } from "../handlers/portalHandler";
 import { getTicketsConfig, updateTicketsConfig, type TicketsModuleConfig, type TicketPanel, type TicketQuestion } from "../storage/tickets";
 import { getAutomodConfig, updateAutomodConfig } from "../storage/automod";
 import { getWelcomerConfig, updateWelcomerConfig, type WelcomerConfig, type WelcomerEmbedConfig } from "../storage/welcomer";
@@ -203,13 +204,6 @@ const MODULE_DEFS: ModuleDef[] = [
     moduleKey: "serverMaintenance",
     channelKey: null,
     description: "Maintenance mode — creates a restricted category and lets you swap member roles with a button.",
-  },
-  {
-    id: "staffDirectoryLog",
-    label: "Staff Feedback Log",
-    desc: "Where staff ratings and feedback are sent",
-    key: "staffDirectoryLog",
-    emoji: CE.information.str,
   },
   {
     id: "staffDirectory",
@@ -534,7 +528,7 @@ function buildOverviewEmbed(cfg: GuildConfig): EmbedBuilder {
 
   return new EmbedBuilder()
     .setTitle("Relosta Configuration")
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setDescription(desc.trim())
     .setFooter({ text: "Administrators always have access." });
 }
@@ -558,7 +552,7 @@ function buildCategoryEmbed(catId: string, cfg: GuildConfig): EmbedBuilder {
 
   return new EmbedBuilder()
     .setTitle(`${cat.emoji} ${cat.label} Configuration`)
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setDescription(desc.trim());
 }
 
@@ -731,13 +725,13 @@ function moduleActionRows(cfg: GuildConfig, mod: ModuleDef): Row[] {
       .setEmoji(CE.admin.str),
   );
 
-  if (mod.id === "appeals") {
+  if (mod.id === "staffDirectory") {
     actionRow.addComponents(
       new ButtonBuilder()
-        .setCustomId("cfg:appeals:setInvite")
-        .setLabel("Set Appeal Server")
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji(CE.information.str),
+        .setCustomId("cfg:staffDir:spawn")
+        .setLabel("Spawn Portal")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji(CE.staff.str),
     );
   }
 
@@ -813,7 +807,7 @@ function buildSettingsEmbed(cfg: GuildConfig, modId: string): EmbedBuilder {
   const mod = MODULE_DEFS.find((m) => m.id === modId);
   const e = new EmbedBuilder()
     .setTitle(`${mod?.emoji.str ?? CE.settings.str} ${mod?.label ?? modId} — Settings`)
-    .setColor(0x5865f2);
+    .setColor(0x2b2d31);
 
   switch (modId) {
     case "infractions": {
@@ -1428,7 +1422,7 @@ function buildPrefixEmbed(cfg: GuildConfig): EmbedBuilder {
   const prefix = cfg.guildPrefix ?? "$";
   return new EmbedBuilder()
     .setTitle(`${CE.settings.str} Custom Prefix`)
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setDescription(
       "Set a custom command prefix for this server.\n" +
       "Only the DM broadcast command is affected — nuke and highfi are always `bp?`.",
@@ -1484,7 +1478,7 @@ function prefixModal(cfg: GuildConfig): ModalBuilder {
 function buildBotProfileEmbed(nickname: string | null, avatarUrl: string, note?: string): EmbedBuilder {
   const e = new EmbedBuilder()
     .setTitle(`${CE.admin.str} Bot Profile — This Server`)
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setThumbnail(avatarUrl || null)
     .setDescription(
       note ??
@@ -1538,7 +1532,7 @@ function botProfileModal(currentNick: string | null): ModalBuilder {
 // ── Quota-specific builders ───────────────────────────────────────────────────
 
 function buildQuotaEmbed(c: GuildConfig): EmbedBuilder {
-  const e = new EmbedBuilder().setTitle("Quota Configuration").setColor(0x5865f2);
+  const e = new EmbedBuilder().setTitle("Quota Configuration").setColor(0x2b2d31);
   if (c.quotaConfig) {
     e.addFields(
       { name: "Global — Messages / week", value: String(c.quotaConfig.messages), inline: true },
@@ -1753,7 +1747,7 @@ async function staffRolesView(guildId: string): Promise<{ embed: EmbedBuilder; r
   const roles = await listStaffRoles(guildId);
   const embed = new EmbedBuilder()
     .setTitle("Staff Roles")
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setDescription(
       roles.length === 0
         ? "*No staff roles registered yet.* Use the picker below to add one."
@@ -1789,7 +1783,10 @@ async function staffRolesView(guildId: string): Promise<{ embed: EmbedBuilder; r
     rows: [
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(addSel),
       new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(rmSel),
-      backRow(),
+      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder().setCustomId("cfg:back").setLabel("← Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("cfg:staff:resetDataBtn").setLabel("Reset Staff Database").setStyle(ButtonStyle.Danger).setEmoji(CE.trash.str)
+      ),
     ],
   };
 }
@@ -2001,7 +1998,7 @@ function buildAntiNukeAccessEmbed(cfg: GuildConfig): EmbedBuilder {
   const an = getAntiNukeConfig(cfg);
   return new EmbedBuilder()
     .setTitle(`${CE.admin.str} Anti-Nuke · Access Control`)
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setDescription(
       "These users can open the Anti-Nuke config panel even without a role above the bot.\n" +
       "**Global whitelist members and users with roles above the bot always have access.**",
@@ -2049,7 +2046,7 @@ function buildAntiNukeGlobalWLEmbed(cfg: GuildConfig): EmbedBuilder {
   const an = getAntiNukeConfig(cfg);
   return new EmbedBuilder()
     .setTitle(`${CE.members.str} Anti-Nuke · Global Whitelist`)
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setDescription("Users and roles here are exempt from **all** anti-nuke actions.")
     .addFields(
       {
@@ -2156,14 +2153,14 @@ function buildMultiPanelEmbed(tc: TicketsModuleConfig): EmbedBuilder {
   if (!mp) {
     return new EmbedBuilder()
       .setTitle("📋 Multi-Panel")
-      .setColor(0x5865f2)
+      .setColor(0x2b2d31)
       .setDescription("No multi-panel configured yet.\n\nA multi-panel groups multiple ticket panels into **one embed**, displayed as **buttons** or a **dropdown menu**. Users pick a category and the matching ticket opens.");
   }
   const panels = Object.values(tc.panels);
   const includedNames = mp.panelIds.map((id) => panels.find((p) => p.id === id)?.name ?? id);
   return new EmbedBuilder()
     .setTitle("📋 Multi-Panel Config")
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .addFields(
       { name: "Embed Title", value: mp.embedTitle || "*Not set*", inline: true },
       { name: "Display Style", value: mp.useButtons ? "🔘 Buttons" : "📑 Dropdown", inline: true },
@@ -2222,7 +2219,7 @@ function buildTicketPanelEmbed(panel: TicketPanel): EmbedBuilder {
     : "*No questions — ticket opens immediately.*";
   return new EmbedBuilder()
     .setTitle(`${CE.ticket.str} Panel — ${panel.name}`)
-    .setColor(panel.embedColor || 0x5865f2)
+    .setColor(panel.embedColor || 0x2b2d31)
     .addFields(
       { name: "Embed Title", value: panel.embedTitle || "*Not set*", inline: true },
       { name: "Button Label", value: panel.buttonLabel, inline: true },
@@ -2243,7 +2240,7 @@ function buildPanelQuestionsEmbed(panel: TicketPanel): EmbedBuilder {
     : "*No questions configured yet.*\n\nAdd up to 5 questions. Users will answer them in a pop-up form before the ticket channel is created.";
   return new EmbedBuilder()
     .setTitle(`${CE.ticket.str} Pre-Ticket Questions — ${panel.name}`)
-    .setColor(panel.embedColor || 0x5865f2)
+    .setColor(panel.embedColor || 0x2b2d31)
     .setDescription(desc)
     .setFooter({ text: `${qs.length}/5 questions · Changes take effect on the next ticket opened` });
 }
@@ -2317,7 +2314,7 @@ function buildLevelsEmbed(lc: LevelConfig): EmbedBuilder {
     : "None";
 
   return new EmbedBuilder()
-    .setColor(0x5865f2)
+    .setColor(0x2b2d31)
     .setTitle(`${CE.trophy.str} Levels — Config`)
     .addFields(
       { name: "Status", value: lc.enabled ? `${CE.success.str} Enabled` : `${CE.error.str} Disabled`, inline: true },
@@ -2885,6 +2882,24 @@ const command: SlashCommand = {
           return;
         }
 
+        if (id === "cfg:staffDir:spawn") {
+          if (!i.channel || !("send" in i.channel)) {
+            await i.reply({ content: `${CE.error.str} You must run this command in a text channel.`, flags: 1 << 6 });
+            return;
+          }
+          if (!i.guild) return;
+          
+          const payload = await buildPortalMessage(i.guild, 0);
+          if (payload.components.length === 0) {
+            await i.reply({ content: `${CE.error.str} The Staff Directory module is disabled.`, flags: 1 << 6 });
+            return;
+          }
+          
+          await i.channel.send(payload);
+          await i.reply({ content: `${CE.success.str} Staff Directory Portal has been spawned in this channel.`, flags: 1 << 6 });
+          return;
+        }
+
 
         // ── Tickets handlers ─────────────────────────────────────────────────
 
@@ -2900,7 +2915,7 @@ const command: SlashCommand = {
         }
         if (id === "cfg:tickets:setSupportRole") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Support Role").setDescription("Select the global support staff role — pinged when a ticket is opened.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Support Role").setDescription("Select the global support staff role — pinged when a ticket is opened.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId("cfg:tickets:supportRoleResult").setPlaceholder("Select support role")), backRow()],
           });
           return;
@@ -2912,7 +2927,7 @@ const command: SlashCommand = {
         }
         if (id === "cfg:tickets:setAdminRole") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Admin Role").setDescription("Select the ticket admin role — can close any ticket.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Admin Role").setDescription("Select the ticket admin role — can close any ticket.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId("cfg:tickets:adminRoleResult").setPlaceholder("Select admin role")), backRow()],
           });
           return;
@@ -2924,7 +2939,7 @@ const command: SlashCommand = {
         }
         if (id === "cfg:tickets:setLogChannel") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Log Channel").setDescription("Select a channel for ticket logs.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Log Channel").setDescription("Select a channel for ticket logs.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:tickets:logChResult").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select log channel")), backRow()],
           });
           return;
@@ -2936,7 +2951,7 @@ const command: SlashCommand = {
         }
         if (id === "cfg:tickets:setTranscriptChannel") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Transcript Channel").setDescription("Select where ticket transcripts are sent when tickets close.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Transcript Channel").setDescription("Select where ticket transcripts are sent when tickets close.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:tickets:transcriptChResult").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select channel")), backRow()],
           });
           return;
@@ -2963,7 +2978,7 @@ const command: SlashCommand = {
               name: submit.fields.getTextInputValue("panelName").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
               embedTitle: submit.fields.getTextInputValue("embedTitle"),
               embedDescription: submit.fields.getTextInputValue("embedDescription") || "Click the button below to open a ticket.",
-              embedColor: 0x5865f2,
+              embedColor: 0x2b2d31,
               buttonLabel: submit.fields.getTextInputValue("buttonLabel"),
               buttonEmoji: submit.fields.getTextInputValue("buttonEmoji") || undefined,
             };
@@ -3008,7 +3023,7 @@ const command: SlashCommand = {
         if (id.startsWith("cfg:tickets:panel:setSupportRole:")) {
           const panelId = id.slice("cfg:tickets:panel:setSupportRole:".length);
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Override Support Role").setDescription("Select a role to override the global support staff role for this panel only.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Override Support Role").setDescription("Select a role to override the global support staff role for this panel only.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId(`cfg:tickets:panel:supportRoleRes:${panelId}`).setPlaceholder("Select role")), new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId(`cfg:tickets:panel:view:${panelId}`).setLabel("← Back").setStyle(ButtonStyle.Secondary))],
           });
           return;
@@ -3023,7 +3038,7 @@ const command: SlashCommand = {
         if (id.startsWith("cfg:tickets:panel:setCategory:")) {
           const panelId = id.slice("cfg:tickets:panel:setCategory:".length);
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Ticket Category").setDescription("Select the category where ticket channels will be created.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Ticket Category").setDescription("Select the category where ticket channels will be created.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`cfg:tickets:panel:categoryRes:${panelId}`).setChannelTypes(ChannelType.GuildCategory).setPlaceholder("Select category")), new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId(`cfg:tickets:panel:view:${panelId}`).setLabel("← Back").setStyle(ButtonStyle.Secondary))],
           });
           return;
@@ -3038,7 +3053,7 @@ const command: SlashCommand = {
         if (id.startsWith("cfg:tickets:panel:setChannel:")) {
           const panelId = id.slice("cfg:tickets:panel:setChannel:".length);
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Panel Channel").setDescription("Select where the ticket panel embed will be posted.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Panel Channel").setDescription("Select where the ticket panel embed will be posted.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId(`cfg:tickets:panel:channelRes:${panelId}`).setChannelTypes(ChannelType.GuildText).setPlaceholder("Select channel")), new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId(`cfg:tickets:panel:view:${panelId}`).setLabel("← Back").setStyle(ButtonStyle.Secondary))],
           });
           return;
@@ -3066,7 +3081,7 @@ const command: SlashCommand = {
           const ch = i.guild?.channels.cache.get(panel.panelChannelId) as any;
           if (!ch || !ch.send) { await i.reply({ content: "Channel not found.", flags: 1 << 6 }); return; }
           if (panel.panelMessageId) { await ch.messages.fetch(panel.panelMessageId).then((m: any) => m.delete()).catch(() => {}); }
-          const panelEmbed = new EmbedBuilder().setTitle(panel.embedTitle).setDescription(panel.embedDescription || null).setColor(panel.embedColor || 0x5865f2);
+          const panelEmbed = new EmbedBuilder().setTitle(panel.embedTitle).setDescription(panel.embedDescription || null).setColor(panel.embedColor || 0x2b2d31);
           const btnB = new ButtonBuilder().setCustomId(`ticket:open:${panelId}:${guildId}`).setLabel(panel.buttonLabel).setStyle(ButtonStyle.Primary);
           if (panel.buttonEmoji) {
             const cm = panel.buttonEmoji.match(/^<a?:(\w+):(\d+)>$/);
@@ -3167,7 +3182,7 @@ const command: SlashCommand = {
 
         if (id === "cfg:tickets:multiPanel:setChannel") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Multi-Panel Channel").setDescription("Select which channel the multi-panel embed will be posted in.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Multi-Panel Channel").setDescription("Select which channel the multi-panel embed will be posted in.").setColor(0x2b2d31)],
             components: [
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:tickets:multiPanel:channelRes").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select channel")),
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ButtonBuilder().setCustomId("cfg:tickets:multiPanel").setLabel("← Back").setStyle(ButtonStyle.Secondary)),
@@ -3199,7 +3214,7 @@ const command: SlashCommand = {
             await postCh.messages.fetch(mp.messageId).then((m: any) => m.delete()).catch(() => {});
           }
 
-          const panelEmbed = new EmbedBuilder().setTitle(mp.embedTitle).setDescription(mp.embedDescription || null).setColor(0x5865f2);
+          const panelEmbed = new EmbedBuilder().setTitle(mp.embedTitle).setDescription(mp.embedDescription || null).setColor(0x2b2d31);
           const includedPanels = mp.panelIds.map((pid) => tc.panels[pid]).filter(Boolean) as TicketPanel[];
 
           let msgComponents: any[];
@@ -3343,7 +3358,7 @@ const command: SlashCommand = {
         }
         if (id === "cfg:welcomer:channel:setChannel") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Set Welcome Channel").setDescription("Select the channel where welcome messages will be sent.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Set Welcome Channel").setDescription("Select the channel where welcome messages will be sent.").setColor(0x2b2d31)],
             components: [
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
                 new ChannelSelectMenuBuilder().setCustomId("cfg:welcomer:channel:chResult").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select channel"),
@@ -3626,7 +3641,7 @@ const command: SlashCommand = {
         }
         if (id === "cfg:automod:setLogChannel") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setTitle("Automod Log Channel").setDescription("Select a channel for automod action logs.").setColor(0x5865f2)],
+            embeds: [new EmbedBuilder().setTitle("Automod Log Channel").setDescription("Select a channel for automod action logs.").setColor(0x2b2d31)],
             components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:automod:logChRes").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select log channel")), backRow()],
           });
           return;
@@ -3794,7 +3809,7 @@ const command: SlashCommand = {
             embeds: [
               new EmbedBuilder()
                 .setTitle(`${CE.warning.str} Anti-Nuke · Common Punishment`)
-                .setColor(0x5865f2)
+                .setColor(0x2b2d31)
                 .setDescription("Select the punishment to use when **Enable All** is applied.\nThis also sets the punishment for all mini-modules when you press Enable All."),
             ],
             components: [
@@ -4540,7 +4555,7 @@ const command: SlashCommand = {
           const shopEmbed = new EmbedBuilder()
             .setTitle(miniPostShop.embed.title ?? miniPostShop.name)
             .setDescription(miniPostShop.embed.description ?? `Click below to open a ticket and purchase from **${miniPostShop.name}**!`)
-            .setColor(0x5865f2)
+            .setColor(0x2b2d31)
             .setTimestamp();
           if (miniPostShop.embed.thumbnail) shopEmbed.setThumbnail(miniPostShop.embed.thumbnail);
           if (miniPostShop.embed.image) shopEmbed.setImage(miniPostShop.embed.image);
@@ -4550,7 +4565,7 @@ const command: SlashCommand = {
           }
 
           const shopStatus = miniPostShop.status ?? "active";
-          const statusColor = shopStatus === "out_of_stock" ? 0xed4245 : shopStatus === "coming_soon" ? 0xfee75c : 0x5865f2;
+          const statusColor = shopStatus === "out_of_stock" ? 0xed4245 : shopStatus === "coming_soon" ? 0xfee75c : 0x2b2d31;
           shopEmbed.setColor(statusColor);
 
           let statusRow: ActionRowBuilder<MessageActionRowComponentBuilder>;
@@ -5212,7 +5227,7 @@ const command: SlashCommand = {
             embeds: [
               new EmbedBuilder()
                 .setTitle("Quota Whitelist")
-                .setColor(0x5865f2)
+                .setColor(0x2b2d31)
                 .setDescription(
                   "Roles on this list are **completely skipped** during the Friday quota check — " +
                   "they won't receive warnings, strikes, or terminations.\n\n" +
@@ -5270,7 +5285,7 @@ const command: SlashCommand = {
             embeds: [
               new EmbedBuilder()
                 .setTitle("Quota Whitelist")
-                .setColor(0x5865f2)
+                .setColor(0x2b2d31)
                 .setDescription("Role removed from the whitelist.")
                 .addFields({
                   name: "Currently Whitelisted",
@@ -5424,7 +5439,7 @@ const command: SlashCommand = {
 
         if (id === "cfg:levels:setLevelUpChannel") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setColor(0x5865f2).setDescription("Select the channel where level-up announcements go. Pick the same channel members chat in, or a dedicated #level-up channel.")],
+            embeds: [new EmbedBuilder().setColor(0x2b2d31).setDescription("Select the channel where level-up announcements go. Pick the same channel members chat in, or a dedicated #level-up channel.")],
             components: [
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
                 new ChannelSelectMenuBuilder().setCustomId("cfg:levels:levelUpChResult").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select level-up channel"),
@@ -5443,7 +5458,7 @@ const command: SlashCommand = {
 
         if (id === "cfg:levels:setIgnoredChannels") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setColor(0x5865f2).setDescription("Select channels where members will **not** earn XP.")],
+            embeds: [new EmbedBuilder().setColor(0x2b2d31).setDescription("Select channels where members will **not** earn XP.")],
             components: [
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
                 new ChannelSelectMenuBuilder().setCustomId("cfg:levels:ignoredChResult").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select ignored channels").setMinValues(0).setMaxValues(25),
@@ -5462,7 +5477,7 @@ const command: SlashCommand = {
 
         if (id === "cfg:levels:setAllowedChannels") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setColor(0x5865f2).setDescription("Select channels where members **can** earn XP (leave empty to allow all channels).")],
+            embeds: [new EmbedBuilder().setColor(0x2b2d31).setDescription("Select channels where members **can** earn XP (leave empty to allow all channels).")],
             components: [
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
                 new ChannelSelectMenuBuilder().setCustomId("cfg:levels:allowedChResult").setChannelTypes(ChannelType.GuildText).setPlaceholder("Select allowed channels (empty = all)").setMinValues(0).setMaxValues(25),
@@ -5481,7 +5496,7 @@ const command: SlashCommand = {
 
         if (id === "cfg:levels:setIgnoredRoles") {
           await safeUpdate(i, {
-            embeds: [new EmbedBuilder().setColor(0x5865f2).setDescription("Select roles that will be **excluded** from earning XP (e.g. bots, staff).")],
+            embeds: [new EmbedBuilder().setColor(0x2b2d31).setDescription("Select roles that will be **excluded** from earning XP (e.g. bots, staff).")],
             components: [
               new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
                 new RoleSelectMenuBuilder().setCustomId("cfg:levels:ignoredRolesResult").setPlaceholder("Select ignored roles").setMinValues(0).setMaxValues(25),

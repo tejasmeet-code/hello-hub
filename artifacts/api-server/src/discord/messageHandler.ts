@@ -373,10 +373,10 @@ async function handleGenericPrefixCommand(
   
   const wrapInEmbed = (payload: any) => {
     if (typeof payload === "string") {
-      return { embeds: [new EmbedBuilder().setColor(0x5865f2).setDescription(payload)] };
+      return { embeds: [new EmbedBuilder().setColor(0x2b2d31).setDescription(payload)] };
     }
     if (payload.content && (!payload.embeds || payload.embeds.length === 0)) {
-      payload.embeds = [new EmbedBuilder().setColor(0x5865f2).setDescription(payload.content)];
+      payload.embeds = [new EmbedBuilder().setColor(0x2b2d31).setDescription(payload.content)];
       delete payload.content;
     }
     return payload;
@@ -420,7 +420,7 @@ async function handleGenericPrefixCommand(
     editReply: async (replyContent: any) => {
       const payload = wrapInEmbed(replyContent);
       const { flags: _flags, ephemeral: _ephemeral, ...rest } = payload as any;
-      await (message.channel as GuildTextBasedChannel).send(rest).catch(() => {});
+      return await (message.channel as GuildTextBasedChannel).send(rest).catch(() => null);
     },
     reply: async (replyContent: any) => {
       if ((mockInteraction as any).replied || (mockInteraction as any).deferred) {
@@ -429,12 +429,12 @@ async function handleGenericPrefixCommand(
       (mockInteraction as any).replied = true;
       const payload = wrapInEmbed(replyContent);
       const { flags: _flags, ephemeral: _ephemeral, ...rest } = payload as any;
-      await (message.channel as GuildTextBasedChannel).send(rest).catch(() => {});
+      return await (message.channel as GuildTextBasedChannel).send(rest).catch(() => null);
     },
     followUp: async (replyContent: any) => {
       const payload = wrapInEmbed(replyContent);
       const { flags: _flags, ephemeral: _ephemeral, ...rest } = payload as any;
-      await (message.channel as GuildTextBasedChannel).send(rest).catch(() => {});
+      return await (message.channel as GuildTextBasedChannel).send(rest).catch(() => null);
     },
     showModal: async () => {
       await (message.channel as GuildTextBasedChannel).send({

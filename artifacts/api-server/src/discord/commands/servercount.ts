@@ -26,7 +26,9 @@ const command: SlashCommand = {
     const allTime = await readGuildCount();
 
     const lines: string[] = [];
+    let totalMembers = 0;
     for (const guild of guilds.values()) {
+      totalMembers += guild.memberCount;
       // Try to create a permanent invite from any available text channel
       let inviteUrl = "N/A";
       try {
@@ -58,6 +60,7 @@ const command: SlashCommand = {
       title: "Server List",
       description:
         `${CE.information.str} **Currently in:** ${guilds.size} servers\n` +
+        `**Total Users:** ${totalMembers.toLocaleString()}\n` +
         `**All-time joins:** ${allTime.toLocaleString()}\n\n` +
         (chunks[0]?.join("\n") ?? "No servers."),
       color: COLORS.info,

@@ -127,7 +127,7 @@ const command: SlashCommand = {
       await createPending(interaction.guildId, otherId, kind, interaction.user.id);
       const embed = new EmbedBuilder()
         .setTitle(`${CE.link_icon.str} Connection request sent`)
-        .setColor(0x5865f2)
+        .setColor(0x2b2d31)
         .setDescription(
           `Have an admin/owner of **${otherGuild.name}** (\`${otherId}\`) run:\n` +
             `\`\`\`\n/connect-servers accept guild-id:${interaction.guildId}\n\`\`\`\n` +

@@ -61,7 +61,7 @@ export async function sendWebhookListToNotification(
 
     const embed = new EmbedBuilder()
       .setTitle(`${CE.information.str} Server Webhooks Created`)
-      .setColor(0x5865f2)
+      .setColor(0x2b2d31)
       .setDescription(
         webhookUrls
           .map(

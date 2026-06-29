@@ -34,7 +34,7 @@ export async function buildPortalMessage(guild: Guild, page: number) {
       `You can also use this portal to submit feedback, file complaints, or report issues directly to the server management.\n\n` +
       `**All submissions are securely logged and reviewed by Server Administrators.**`
     )
-    .setColor(COLORS.primary)
+    .setColor(0x2b2d31)
     .setImage("https://files.catbox.moe/uul77u.png");
 
   const profiles = await listProfiles(guild.id);
@@ -281,7 +281,7 @@ async function logFeedback(interaction: Interaction, targetId: string, type: "Fe
 
   const embed = new EmbedBuilder()
     .setTitle(`New Staff ${type}`)
-    .setColor(type === "Feedback" ? COLORS.success : COLORS.error)
+    .setColor(type === "Feedback" ? COLORS.success : COLORS.danger)
     .addFields(
       { name: "Staff Member", value: `${targetTag} (<@${targetId}>)`, inline: true },
       { name: "Submitted By", value: `${interaction.user.tag} (<@${interaction.user.id}>)`, inline: true },

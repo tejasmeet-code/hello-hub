@@ -62,7 +62,7 @@ function defaultConfig(): WelcomerConfig {
       embed: {
         title: "Welcome to {server}!",
         description: "Hey {user}, welcome to **{server}**! You are our **{ordinal}** member 🎉",
-        color: 0x5865f2,
+        color: 0x2b2d31,
         showAvatar: true,
         footer: "{server} • {count} members",
       },

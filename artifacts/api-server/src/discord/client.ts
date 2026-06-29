@@ -341,7 +341,7 @@ export async function startDiscordBot(): Promise<void> {
             name: ticketId, type: CT.GuildText, parent: panel.categoryId ?? undefined, permissionOverwrites: overwrites, reason: `Ticket by ${interaction.user.tag}`,
           });
           await createOpenTicket({ ticketId, panelId, channelId: channel.id, guildId, userId: interaction.user.id, createdAt: Date.now(), status: "open" });
-          const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x5865f2)
+          const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x2b2d31)
             .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
             .setFooter({ text: "Use the buttons below to manage this ticket." }).setTimestamp();
           const ticketRow = new ARB().addComponents(
@@ -428,12 +428,12 @@ export async function startDiscordBot(): Promise<void> {
           } catch { /* non-critical */ }
 
           // Announce claim in-channel
-          await ch.send({ embeds: [new EB().setColor(0x5865f2).setDescription(`🙋 <@${interaction.user.id}> has **claimed** this ticket and will be handling your request.`).setTimestamp()] }).catch(() => {});
+          await ch.send({ embeds: [new EB().setColor(0x2b2d31).setDescription(`🙋 <@${interaction.user.id}> has **claimed** this ticket and will be handling your request.`).setTimestamp()] }).catch(() => {});
 
           // Log to log channel
           if (tc.logChannelId) {
             const logCh = interaction.guild.channels.cache.get(tc.logChannelId) as any;
-            if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x5865f2).setTitle("Ticket Claimed")
+            if (logCh?.send) await logCh.send({ embeds: [new EB().setColor(0x2b2d31).setTitle("Ticket Claimed")
               .addFields(
                 { name: "Ticket", value: `${ch} (\`${ticket.ticketId}\`)`, inline: true },
                 { name: "Claimed by", value: `<@${interaction.user.id}>`, inline: true },
@@ -473,7 +473,7 @@ export async function startDiscordBot(): Promise<void> {
                 const { EmbedBuilder: EB } = await import("discord.js");
                 const lines = [...messages.values()].reverse().map((m: any) => `[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.content || "(no text)"}`);
                 const tCh = interaction.guild.channels.cache.get(tc.transcriptChannelId) as any;
-                if (tCh?.send) await tCh.send({ embeds: [new EB().setTitle(`${CE.transcript.str} Transcript — ${ticket.ticketId}`).setColor(0x5865f2)
+                if (tCh?.send) await tCh.send({ embeds: [new EB().setTitle(`${CE.transcript.str} Transcript — ${ticket.ticketId}`).setColor(0x2b2d31)
                   .addFields({ name: "Opened by", value: `<@${ticket.userId}>`, inline: true }, { name: "Closed by", value: `<@${interaction.user.id}>`, inline: true }).setTimestamp()],
                   files: [{ attachment: Buffer.from(lines.join("\n")), name: `${ticket.ticketId}.txt` }] }).catch(() => {});
               }
@@ -553,7 +553,7 @@ export async function startDiscordBot(): Promise<void> {
           name: ticketId, type: CT.GuildText, parent: panel.categoryId ?? undefined, permissionOverwrites: overwrites, reason: `Ticket by ${interaction.user.tag}`,
         });
         await createOpenTicket({ ticketId, panelId, channelId: channel.id, guildId, userId: interaction.user.id, createdAt: Date.now(), status: "open" });
-        const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x5865f2)
+        const welcomeEmbed = new EB().setTitle(`${CE.ticket.str} ${ticketId}`).setColor(panel.embedColor || 0x2b2d31)
           .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
           .setFooter({ text: "Use the buttons below to manage this ticket." }).setTimestamp();
         const ticketRow = new ARB().addComponents(
@@ -669,7 +669,7 @@ export async function startDiscordBot(): Promise<void> {
           // Build welcome embed with answers included
           const welcomeEmbed = new EB()
             .setTitle(`${CE.ticket.str} ${ticketId}`)
-            .setColor(panel.embedColor || 0x5865f2)
+            .setColor(panel.embedColor || 0x2b2d31)
             .setDescription(`Welcome, <@${interaction.user.id}>!\n\nSupport will be with you shortly.`)
             .setFooter({ text: "Use the buttons below to manage this ticket." })
             .setTimestamp();
@@ -901,7 +901,7 @@ export async function startDiscordBot(): Promise<void> {
                   const ch: any = lc.levelUpChannel
                     ? (message.guild?.channels.cache.get(lc.levelUpChannel) ?? message.channel)
                     : message.channel;
-                  if (ch?.send) await ch.send({ embeds: [new LEB().setColor(lc.embedColor ?? 0x5865f2).setDescription(`${CE.trophy.str} ${lvMsg}`).setThumbnail(mem.displayAvatarURL()).setFooter({ text: `Level ${newLevel}` })] }).catch(() => {});
+                  if (ch?.send) await ch.send({ embeds: [new LEB().setColor(lc.embedColor ?? 0x2b2d31).setDescription(`${CE.trophy.str} ${lvMsg}`).setThumbnail(mem.displayAvatarURL()).setFooter({ text: `Level ${newLevel}` })] }).catch(() => {});
                   if (lc.levelRoles.length > 0) {
                     const eligible = lc.levelRoles.filter((lr) => lr.level <= newLevel).map((lr) => lr.roleId);
                     if (!lc.stackRoles) {
@@ -1215,7 +1215,7 @@ export async function startDiscordBot(): Promise<void> {
           const ch: any = lc.levelUpChannel ? (newState.guild.channels.cache.get(lc.levelUpChannel) ?? null) : null;
           if (ch?.send && mem) {
             const lvMsg = lc.embedMessage.replace("{user}", `${mem}`).replace("{level}", String(newLevel));
-            await ch.send({ embeds: [new LEB().setColor(lc.embedColor ?? 0x5865f2).setDescription(`${CE.trophy.str} ${lvMsg}`).setThumbnail(mem.displayAvatarURL()).setFooter({ text: `Level ${newLevel} (VC)` })] }).catch(() => {});
+            await ch.send({ embeds: [new LEB().setColor(lc.embedColor ?? 0x2b2d31).setDescription(`${CE.trophy.str} ${lvMsg}`).setThumbnail(mem.displayAvatarURL()).setFooter({ text: `Level ${newLevel} (VC)` })] }).catch(() => {});
           }
         }
       } catch (err) { logger.warn({ err }, "Levels XP error (VC)"); }

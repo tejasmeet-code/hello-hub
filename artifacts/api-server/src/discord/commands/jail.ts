@@ -113,7 +113,7 @@ const command: SlashCommand = {
         moderator: interaction.user,
         reason,
         extraFields,
-        emoji: CE.role?.str || "🚔",
+        emoji: CE.moderation?.str || "🚔",
         color: COLORS.success
       })]
     });

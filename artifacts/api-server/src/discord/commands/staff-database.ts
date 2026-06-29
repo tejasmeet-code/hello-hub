@@ -39,8 +39,8 @@ const command: SlashCommand = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`Staff Database — ${guild.name}`)
-      .setColor(0x5865f2)
+      .setAuthor({ name: `${guild.name} Staff Database`, iconURL: guild.iconURL() ?? undefined })
+      .setColor(0x2b2d31)
       .setTimestamp(new Date());
 
     let totalStaff = 0;
@@ -56,8 +56,12 @@ const command: SlashCommand = {
         lines.length === 0
           ? "*nobody*"
           : lines.join("\n") + (holders.size > 25 ? `\n…and ${holders.size - 25} more` : "");
+          
+      const discordRole = guild.roles.cache.get(r.roleId);
+      const roleName = discordRole ? discordRole.name : r.roleId;
+
       embed.addFields({
-        name: `#${r.position} — <@&${r.roleId}> (${holders.size})`,
+        name: `#${r.position} — @${roleName} (${holders.size})`,
         value,
         inline: false,
       });

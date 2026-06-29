@@ -12,7 +12,7 @@ import type { SlashCommand } from "../types";
 import { getGuildCommands } from "../registry";
 import { COLORS, CE, EMOJI } from "../utils/embedStyle";
 
-const CATEGORIES = [
+const CATEGORIES: { id: string; label: string; emoji: string; desc: string; commands: string[] }[] = [
   { id: "overview", label: "Overview & Help", emoji: CE.information.str, desc: "Main menu", commands: [] },
   { id: "setup", label: "Setup Guide", emoji: CE.settings.str, desc: "How to setup the bot", commands: [] },
   { id: "faq", label: "FAQ", emoji: CE.clipboard.str, desc: "Frequently Asked Questions", commands: [] },
@@ -20,7 +20,7 @@ const CATEGORIES = [
   { id: "staff", label: "Staff & Admin", emoji: CE.admin.str, desc: "Server configuration and staff tracking", commands: ["config", "bot-admin", "ai-admin", "loa", "staff-report", "promote", "demote", "staff-roles", "bot-check", "maintenance", "whitelist", "whitelist-global", "verify-owner", "setup"] },
   { id: "economy", label: "Economy & Levels", emoji: CE.cash.str, desc: "Ranks, shop, and currency", commands: ["rank", "leaderboard", "give-xp", "slots"] },
   { id: "fun", label: "Fun & Games", emoji: CE.giveaway.str, desc: "Games, minigames, and fun commands", commands: ["8ball", "coinflip", "roll", "rps", "tictactoe", "connect4", "hangman", "trivia", "wouldyourather", "wordscramble", "meme", "ship", "spooky", "guess", "higherlower", "russianroulette"] },
-  { id: "utility", label: "Utility & Info", emoji: CE.information.str, desc: "Useful tools and information", commands: ["help", "ping", "serverinfo", "userinfo", "botinfo", "roleinfo", "avatar", "setavatar", "servercount", "poll", "announce", "dm", "note", "pull", "giveaway"] },
+  { id: "utility", label: "Utility & Info", emoji: CE.information.str, desc: "Useful tools and information", commands: ["help", "ping", "serverinfo", "userinfo", "botinfo", "roleinfo", "avatar", "setavatar", "servercount", "poll", "announce", "dm", "note", "pull", "giveaway", "staff-database"] },
 ];
 
 const command: SlashCommand = {

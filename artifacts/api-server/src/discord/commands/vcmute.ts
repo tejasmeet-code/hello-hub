@@ -49,7 +49,7 @@ const command: SlashCommand = {
         extraFields: [
           { label: "Channel", value: `<#${member.voice.channel.id}>` }
         ],
-        emoji: mute ? CE.timeout?.str || "🔇" : CE.success.str,
+        emoji: mute ? CE.mute?.str || "🔇" : CE.success.str,
         color: mute ? COLORS.warning : COLORS.success
       })]
     });

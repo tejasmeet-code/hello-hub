@@ -121,7 +121,7 @@ const command: SlashCommand = {
         [...baseLines, ...extraLines].join("\n") || "*Nobody yet.*";
       const embed = new EmbedBuilder()
         .setTitle("Global Whitelist")
-        .setColor(0x5865f2)
+        .setColor(0x2b2d31)
         .setDescription(description)
         .setFooter({
           text: `${base.length} baseline • ${extras.length} runtime • ${PERM_WHITELIST.size} total`,

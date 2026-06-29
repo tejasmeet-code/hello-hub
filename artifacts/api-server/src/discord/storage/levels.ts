@@ -53,7 +53,7 @@ const DEFAULT_CONFIG: LevelConfig = {
   levelLimit: null,
   stackRoles: true,
   levelRoles: [],
-  embedColor: 0x5865f2,
+  embedColor: 0x2b2d31,
   embedMessage: "{user} leveled up to **Level {level}**! Keep chatting to grow! 🎉",
 };
 

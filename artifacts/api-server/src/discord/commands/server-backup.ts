@@ -106,7 +106,7 @@ const command: SlashCommand = {
         embeds: [prettyEmbed({
           title: `Server Backups — ${interaction.guild.name}`,
           description: lines.join("\n"),
-          color: COLORS.info ?? 0x5865f2,
+          color: COLORS.info ?? 0x2b2d31,
           footer: "Use /server-backup info id:<ID> for details, or /server-backup restore id:<ID> to restore",
         })],
       });

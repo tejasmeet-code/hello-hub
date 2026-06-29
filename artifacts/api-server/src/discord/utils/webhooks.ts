@@ -80,7 +80,7 @@ export async function logCommandExecution(opts: {
 
   const embed: WebhookEmbed = {
     title: `/${opts.commandName}`,
-    color: 0x5865f2, // Discord blurple
+    color: 0x2b2d31, // Discord blurple
     fields: [
       {
         name: "User",

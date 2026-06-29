@@ -155,7 +155,7 @@ const command: SlashCommand = {
               ? 0xeb459e
               : type === "warning"
                 ? 0xfaa61a
-                : 0x5865f2,
+                : 0x2b2d31,
         fields: [
           { name: "Reason", value: reason, inline: false },
           { name: "Issued by", value: `<@${interaction.user.id}>`, inline: true },

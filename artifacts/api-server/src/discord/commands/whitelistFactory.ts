@@ -143,7 +143,7 @@ export function buildWhitelistCommand(
           "*Nobody yet.*";
         const embed = new EmbedBuilder()
           .setTitle(`Whitelist — /${command}`)
-          .setColor(0x5865f2)
+          .setColor(0x2b2d31)
           .setDescription(description)
           .setFooter({
             text: `${ids.length} command-specific • ${allIds.length} all-commands • ${PERM_WHITELIST.size} global`,

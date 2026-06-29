@@ -391,3 +391,11 @@ export async function setFeedbackCooldown(guildId: string, staffId: string, subm
   
   await queueWrite(data);
 }
+
+export async function resetStaffData(guildId: string): Promise<void> {
+  const data = await load();
+  if (data[guildId]) {
+    data[guildId] = { roles: [], profiles: {} };
+    await queueWrite(data);
+  }
+}
