@@ -211,7 +211,7 @@ const command: SlashCommand = {
         return;
       }
 
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
 
       const giveawayId = `${interaction.guildId}-${Date.now()}`;
       const endsAt = Date.now() + durationMs;
@@ -269,7 +269,7 @@ const command: SlashCommand = {
     // ── /giveaway end ────────────────────────────────────────────────────────
     if (sub === "end") {
       const messageId = interaction.options.getString("message-id", true);
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
 
       const g = await getGiveawayByMessage(messageId);
       if (!g || g.guildId !== interaction.guildId) {
@@ -318,7 +318,7 @@ const command: SlashCommand = {
     if (sub === "reroll") {
       const messageId = interaction.options.getString("message-id", true);
       const numWinners = interaction.options.getInteger("winners");
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
 
       const g = await getGiveawayByMessage(messageId);
       if (!g || g.guildId !== interaction.guildId) {
@@ -360,7 +360,7 @@ const command: SlashCommand = {
 
     // ── /giveaway list ───────────────────────────────────────────────────────
     if (sub === "list") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const giveaways = await getGuildGiveaways(interaction.guildId);
       const active = giveaways.filter((g) => !g.ended);
       const ended = giveaways.filter((g) => g.ended).slice(0, 5);

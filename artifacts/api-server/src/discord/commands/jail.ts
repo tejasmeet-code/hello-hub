@@ -35,7 +35,7 @@ const command: SlashCommand = {
     if (target.id === interaction.user.id) { await interaction.reply({ content: "You can't jail yourself." , flags: 1 << 6 }); return; }
     if (target.id === interaction.client.user.id) { await interaction.reply({ content: "I can't jail myself." , flags: 1 << 6 }); return; }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (!member) { await interaction.editReply("That user isn't in this server."); return; }

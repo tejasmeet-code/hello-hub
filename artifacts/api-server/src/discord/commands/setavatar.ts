@@ -32,7 +32,7 @@ async function applyAvatar(
   imageUrl: string,
   label: string,
 ): Promise<void> {
-  await interaction.deferReply({ flags: 1 << 6 });
+  await interaction.deferReply();
 
   const res = await fetch(imageUrl).catch(() => null);
   if (!res || !res.ok) {

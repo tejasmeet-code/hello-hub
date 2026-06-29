@@ -42,7 +42,7 @@ const command: SlashCommand = {
     const target = interaction.options.getUser("user", true);
     const reason = interaction.options.getString("reason") ?? "Released by moderator";
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
     const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (!member) {
       await interaction.editReply("That user isn't in this server.");

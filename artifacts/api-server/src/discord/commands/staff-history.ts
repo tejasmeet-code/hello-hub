@@ -35,7 +35,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const target = interaction.options.getUser("user", false) ?? interaction.user;
     const member = await interaction.guild.members

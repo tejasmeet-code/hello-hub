@@ -59,7 +59,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     if (channelOpt) {
       await setStaffReportChannel(guildId, channelOpt.id);

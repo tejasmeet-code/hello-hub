@@ -16,7 +16,7 @@ const command: SlashCommand = {
     if (!interaction.guildId) return;
 
     const target = interaction.options.getUser("moderator") ?? interaction.user;
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const all = await listCases(interaction.guildId);
     const modCases = all.filter(c => c.moderator_id === target.id);

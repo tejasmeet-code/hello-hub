@@ -130,7 +130,7 @@ const command: SlashCommand = {
       const title = postSubmit.fields.getTextInputValue("title").trim();
       const message = postSubmit.fields.getTextInputValue("message").trim();
 
-      await postSubmit.deferReply({ flags: 1 << 6 });
+      await postSubmit.deferReply();
 
       try {
         await channel.send({
@@ -203,7 +203,7 @@ const command: SlashCommand = {
       const title = schedSubmit.fields.getTextInputValue("title").trim();
       const message = schedSubmit.fields.getTextInputValue("message").trim();
 
-      await schedSubmit.deferReply({ flags: 1 << 6 });
+      await schedSubmit.deferReply();
 
       const scheduledFor = toUtcTimestamp(dateStr, timeStr, tz);
       if (!scheduledFor) {
@@ -244,7 +244,7 @@ const command: SlashCommand = {
 
     // ── /announce list ────────────────────────────────────────────────────────
     if (sub === "list") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const all = await getScheduledForGuild(interaction.guildId);
 
       if (all.length === 0) {
@@ -270,7 +270,7 @@ const command: SlashCommand = {
     // ── /announce cancel ──────────────────────────────────────────────────────
     if (sub === "cancel") {
       const id = interaction.options.getString("id", true).trim();
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
 
       const deleted = deleteScheduledAnnounce(interaction.guildId, id);
       if (!deleted) {

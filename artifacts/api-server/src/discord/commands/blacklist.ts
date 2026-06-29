@@ -111,7 +111,7 @@ const command: SlashCommand = {
     }
 
     // Defer now — all remaining paths make at least one async DB call
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const sub = interaction.options.getSubcommand();
 

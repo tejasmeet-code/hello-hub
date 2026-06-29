@@ -54,7 +54,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const staffUser = interaction.options.getUser("staff", true);
     const stats = await getStaffShopStats(interaction.guildId, staffUser.id);

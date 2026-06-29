@@ -26,7 +26,7 @@ const command: SlashCommand = {
     if (!(await ensureWhitelisted(interaction, "edit-case"))) return;
     if (!interaction.guildId) return;
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const caseNumber = interaction.options.getInteger("case_number", true);
     const newReason = interaction.options.getString("reason");

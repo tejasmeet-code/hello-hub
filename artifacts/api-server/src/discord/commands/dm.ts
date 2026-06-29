@@ -139,7 +139,7 @@ export async function handleDmModalSubmit(
   }
 
   const message = interaction.fields.getTextInputValue("dm_message");
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   const guild = interaction.guild;
   const dmTarget: DmTarget = {};

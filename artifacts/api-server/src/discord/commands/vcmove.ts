@@ -21,7 +21,7 @@ const command: SlashCommand = {
     const reason = interaction.options.getString("reason") ?? `Moved by ${interaction.user.tag}`;
 
     // Defer before async API calls to avoid the 3-second Discord timeout
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (!member) {

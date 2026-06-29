@@ -227,7 +227,7 @@ const command: SlashCommand = {
         return;
       }
 
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       await applyTransferable(interaction.guildId, preset.config);
 
       const embed = new EmbedBuilder()

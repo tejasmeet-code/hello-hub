@@ -81,7 +81,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     let targetGuild;
     try {

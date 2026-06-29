@@ -98,7 +98,7 @@ const command: SlashCommand = {
     }
     if (!interaction.guild) return;
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
     const member = await interaction.guild.members
       .fetch(interaction.user.id)
       .catch(() => null);

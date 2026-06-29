@@ -24,7 +24,7 @@ const command: SlashCommand = {
 
     const amount = interaction.options.getInteger("amount", true);
     const filterUser = interaction.options.getUser("user");
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const channel = interaction.channel as GuildTextBasedChannel;
     const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);

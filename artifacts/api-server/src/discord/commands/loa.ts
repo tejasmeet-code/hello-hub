@@ -69,7 +69,7 @@ const command: SlashCommand = {
     if (!(await ensureWhitelisted(interaction, "loa"))) return;
     if (!interaction.guild || !interaction.guildId) return;
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const sub = interaction.options.getSubcommand();
     const cfg = await getGuildConfig(interaction.guildId);

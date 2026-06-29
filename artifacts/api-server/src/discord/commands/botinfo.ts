@@ -32,7 +32,6 @@ const command: SlashCommand = {
         color: COLORS.primary,
         footer: "Relosta Bot • Staff Management System",
       })],
-      flags: 1 << 6,
     });
   },
 };

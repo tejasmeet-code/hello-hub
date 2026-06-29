@@ -36,7 +36,7 @@ const command: SlashCommand = {
   async execute(interaction: ChatInputCommandInteraction) {
     if (!(await ensureWhitelisted(interaction, "timeout"))) return;
     if (!interaction.guild || !interaction.guildId) return;
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const target = interaction.options.getUser("user", true);
     const durationInput = interaction.options.getString("duration", true);

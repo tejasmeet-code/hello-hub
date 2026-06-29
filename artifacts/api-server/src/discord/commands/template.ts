@@ -151,7 +151,7 @@ const command: SlashCommand = {
         return;
       }
 
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const config = await extractTransferable(interaction.guildId);
       const tpl = await saveTemplate({
         name,
@@ -273,7 +273,7 @@ const command: SlashCommand = {
         return;
       }
 
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       await applyTransferable(interaction.guildId, tpl.config);
 
       const embed = new EmbedBuilder()

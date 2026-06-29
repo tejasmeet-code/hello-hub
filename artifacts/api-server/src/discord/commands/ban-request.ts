@@ -44,7 +44,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const cfg = await getGuildConfig(interaction.guildId);
     const banReqChannelId = cfg.channels.banRequest;

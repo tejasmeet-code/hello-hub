@@ -42,7 +42,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
     const ban = await interaction.guild.bans.fetch(userId).catch(() => null);
     if (!ban) {
       await interaction.editReply("That user isn't currently banned.");

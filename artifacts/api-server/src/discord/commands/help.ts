@@ -26,7 +26,7 @@ const command: SlashCommand = {
     .setDescription("List all available slash commands with premium categories."),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const allCommands = getGuildCommands();
     

@@ -76,7 +76,7 @@ const command: SlashCommand = {
     }
 
     // Defer the modal reply so we can do async work
-    await submit.deferReply({ flags: 1 << 6 });
+    await submit.deferReply();
 
     const cfg = await getGuildConfig(interaction.guildId);
     if (!cfg.modules.partnership) {

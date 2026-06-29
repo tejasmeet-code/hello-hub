@@ -35,7 +35,7 @@ const command: SlashCommand = {
     if (!(await ensureWhitelisted(interaction, "case"))) return;
     if (!interaction.guildId) return;
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const sub = interaction.options.getSubcommand();
 

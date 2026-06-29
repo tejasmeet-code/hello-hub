@@ -84,7 +84,7 @@ const command: SlashCommand = {
     }
 
     if (sub === "list") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const backups = await listBackups(interaction.guildId);
       if (backups.length === 0) {
         await interaction.editReply({
@@ -114,7 +114,7 @@ const command: SlashCommand = {
     }
 
     if (sub === "info") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const id = interaction.options.getString("id", true);
       const backup = await getBackup(interaction.guildId, id);
       if (!backup) {
@@ -144,7 +144,7 @@ const command: SlashCommand = {
     }
 
     if (sub === "restore") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const id = interaction.options.getString("id", true);
       const backup = await getBackup(interaction.guildId, id);
       if (!backup) {
@@ -211,7 +211,7 @@ export async function handleServerBackupTakeModalSubmit(interaction: ModalSubmit
   const saveMessagesRaw = interaction.fields.getTextInputValue("save_messages").trim().toLowerCase();
   const includeMessages = /^(y|yes)$/i.test(saveMessagesRaw);
 
-  await interaction.deferReply({ flags: 1 << 6 });
+  await interaction.deferReply();
   try {
     const backup = await takeBackup(interaction.guild, "manual", { includeMessages });
     await interaction.editReply({

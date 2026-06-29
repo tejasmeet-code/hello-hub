@@ -20,7 +20,7 @@ const command: SlashCommand = {
       return;
     }
 
-    await interaction.deferReply({ flags: 1 << 6 });
+    await interaction.deferReply();
 
     const guilds = interaction.client.guilds.cache;
     const allTime = await readGuildCount();

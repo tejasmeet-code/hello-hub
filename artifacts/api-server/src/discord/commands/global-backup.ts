@@ -48,7 +48,7 @@ const command: SlashCommand = {
     const sub = interaction.options.getSubcommand(true);
 
     if (sub === "info") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const id = interaction.options.getString("id", true).toUpperCase();
       const backup = await getBackupById(id);
       if (!backup) {
@@ -79,7 +79,7 @@ const command: SlashCommand = {
     }
 
     if (sub === "restore") {
-      await interaction.deferReply({ flags: 1 << 6 });
+      await interaction.deferReply();
       const id = interaction.options.getString("id", true).toUpperCase();
       const backup = await getBackupById(id);
       if (!backup) {
