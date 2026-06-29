@@ -1008,6 +1008,13 @@ export async function startDiscordBot(): Promise<void> {
     } catch (err) {
       logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling welcomer");
     }
+
+    try {
+      const { safeDispatchMemberJoin } = await import("./utils/automations");
+      safeDispatchMemberJoin(member);
+    } catch (err) {
+      logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling automations on join");
+    }
   });
 
   // ────────────────────────────────────────────────────────────────────
@@ -1049,6 +1056,17 @@ export async function startDiscordBot(): Promise<void> {
     } catch (err) {
       logger.error({ err, guildId: newMember.guild.id, userId: newMember.id }, "Error handling anti-role (member update)");
     }
+
+    try {
+      const addedRoles = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id)).map(r => r.id);
+      const removedRoles = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id)).map(r => r.id);
+      if (addedRoles.length > 0 || removedRoles.length > 0) {
+        const { safeDispatchRoleChange } = await import("./utils/automations");
+        safeDispatchRoleChange(newMember, addedRoles, removedRoles);
+      }
+    } catch (err) {
+      logger.error({ err, guildId: newMember.guild.id, userId: newMember.id }, "Error handling automations on role change");
+    }
   });
 
   // ────────────────────────────────────────────────────────────────────
@@ -1082,6 +1100,13 @@ export async function startDiscordBot(): Promise<void> {
       await handleAntiKick(member.guild, executorId);
     } catch (err) {
       logger.error({ err, guildId: member.guild.id }, "Error handling anti-kick");
+    }
+
+    try {
+      const { safeDispatchMemberLeave } = await import("./utils/automations");
+      safeDispatchMemberLeave(member.guild, member.user);
+    } catch (err) {
+      logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling automations on leave");
     }
   });
 
