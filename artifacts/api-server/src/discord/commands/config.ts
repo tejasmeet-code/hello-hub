@@ -728,6 +728,11 @@ function moduleActionRows(cfg: GuildConfig, mod: ModuleDef): Row[] {
   if (mod.id === "staffDirectory") {
     actionRow.addComponents(
       new ButtonBuilder()
+        .setCustomId("cfg:staffDir:setFeedback")
+        .setLabel("Set Feedback Log")
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji(CE.notifications.str),
+      new ButtonBuilder()
         .setCustomId("cfg:staffDir:spawn")
         .setLabel("Spawn Portal")
         .setStyle(ButtonStyle.Success)
@@ -4835,6 +4840,55 @@ const command: SlashCommand = {
             return c;
           });
           await safeUpdate(i, { embeds: [buildSettingsEmbed(cfg, "partnership")], components: settingsRows(cfg, "partnership") });
+          return;
+        }
+
+        if (id === "cfg:staffDir:setFeedback") {
+          const mod = MODULE_DEFS.find((m) => m.id === "staffDirectory")!;
+          const sel = new ChannelSelectMenuBuilder()
+            .setCustomId("cfg:staffDir:feedbackSet")
+            .setPlaceholder("Pick the channel for staff feedback logs")
+            .addChannelTypes(ChannelType.GuildText)
+            .setMinValues(1)
+            .setMaxValues(1);
+          const clearRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId("cfg:staffDir:feedbackClear")
+              .setLabel("Clear Channel")
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId("cfg:settings:view:staffDirectory")
+              .setLabel("← Back")
+              .setStyle(ButtonStyle.Secondary),
+          );
+          await safeUpdate(i, {
+            embeds: [buildModuleEmbed(cfg, mod).setDescription("Select the channel where staff feedback will be logged:")],
+            components: [
+              new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(sel),
+              clearRow,
+            ],
+          });
+          return;
+        }
+
+        if (id === "cfg:staffDir:feedbackSet" && i.isChannelSelectMenu()) {
+          const mod = MODULE_DEFS.find((m) => m.id === "staffDirectory")!;
+          const channelId = i.values[0]!;
+          cfg = await updateGuildConfig(guildId, (c) => {
+            c.channels.staffFeedbackLog = channelId;
+            return c;
+          });
+          await safeUpdate(i, { embeds: [buildModuleEmbed(cfg, mod)], components: moduleActionRows(cfg, mod) });
+          return;
+        }
+
+        if (id === "cfg:staffDir:feedbackClear") {
+          const mod = MODULE_DEFS.find((m) => m.id === "staffDirectory")!;
+          cfg = await updateGuildConfig(guildId, (c) => {
+            delete c.channels.staffFeedbackLog;
+            return c;
+          });
+          await safeUpdate(i, { embeds: [buildModuleEmbed(cfg, mod)], components: moduleActionRows(cfg, mod) });
           return;
         }
 

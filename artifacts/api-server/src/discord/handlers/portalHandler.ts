@@ -38,19 +38,25 @@ export async function buildPortalMessage(guild: Guild, page: number) {
     .setThumbnail(guild.iconURL({ size: 1024 }) ?? null)
     .setImage("https://files.catbox.moe/uul77u.png");
 
-  const profiles = await listProfiles(guild.id);
-  const activeProfiles = profiles.filter(p => !p.terminated && p.currentRoleId);
   const staffRoles = await listStaffRoles(guild.id);
+  const activeStaff: { userId: string; roleId: string; roleName: string; position: number }[] = [];
   
-  activeProfiles.sort((a, b) => {
-    const rA = staffRoles.find(r => r.roleId === a.currentRoleId)?.position ?? 999;
-    const rB = staffRoles.find(r => r.roleId === b.currentRoleId)?.position ?? 999;
-    return rA - rB;
-  });
+  for (const r of staffRoles) {
+    const role = guild.roles.cache.get(r.roleId);
+    if (role) {
+      for (const member of role.members.values()) {
+        if (!activeStaff.some(s => s.userId === member.id)) {
+          activeStaff.push({ userId: member.id, roleId: r.roleId, roleName: role.name, position: r.position });
+        }
+      }
+    }
+  }
 
-  const totalPages = Math.ceil(activeProfiles.length / PAGE_SIZE) || 1;
+  activeStaff.sort((a, b) => a.position - b.position);
+
+  const totalPages = Math.ceil(activeStaff.length / PAGE_SIZE) || 1;
   const safePage = Math.max(0, Math.min(page, totalPages - 1));
-  const pageProfiles = activeProfiles.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const pageProfiles = activeStaff.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const select = new StringSelectMenuBuilder()
     .setCustomId("staff_dir_select")
@@ -64,11 +70,11 @@ export async function buildPortalMessage(guild: Guild, page: number) {
       try {
         const member = await guild.members.fetch(p.userId).catch(() => null);
         const name = member ? member.user.username : `Unknown (${p.userId})`;
-        const role = member && p.currentRoleId ? member.roles.cache.get(p.currentRoleId)?.name : "Staff";
+        const role = p.roleName;
         select.addOptions([
           {
             label: name,
-            description: `${role ?? "Staff"} | ID: ${p.userId}`,
+            description: `${role} | ID: ${p.userId}`,
             value: p.userId,
             emoji: { name: "👤" }
           }
@@ -271,7 +277,7 @@ export async function handlePortalInteraction(interaction: Interaction) {
 async function logFeedback(interaction: Interaction, targetId: string, type: "Feedback" | "Complaint", rating: number | null, comments: string) {
   if (!interaction.guild) return;
   const config = await getGuildConfig(interaction.guild.id);
-  const logChannelId = config.channels.staffDirectoryLog;
+  const logChannelId = config.channels.staffFeedbackLog || config.channels.staffDirectoryLog;
   if (!logChannelId) return;
 
   const channel = interaction.guild.channels.cache.get(logChannelId);

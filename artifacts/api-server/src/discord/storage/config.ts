@@ -45,6 +45,7 @@ export interface GuildChannels {
   quotaLog?: string;
   roleMemoryLog?: string;
   staffDirectoryLog?: string;
+  staffFeedbackLog?: string;
 }
 
 export interface StaffReportState {
