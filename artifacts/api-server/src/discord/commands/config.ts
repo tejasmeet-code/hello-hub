@@ -211,7 +211,7 @@ const MODULE_DEFS: ModuleDef[] = [
     emoji: CE.information,
     moduleKey: "staffDirectory",
     channelKey: "staffDirectoryLog",
-    description: "Interactive staff list with rating and feedback portal. Use 'Set Permissions' to pick which roles show up in the directory.",
+    description: "Interactive staff portal. Use 'Set Directory Roles' to configure roles.",
   },
 ];
 
