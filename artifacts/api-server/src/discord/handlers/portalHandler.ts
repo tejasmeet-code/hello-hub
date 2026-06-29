@@ -35,6 +35,7 @@ export async function buildPortalMessage(guild: Guild, page: number) {
       `${CE.admin?.str || "⚙️"} **All submissions are securely logged and reviewed by Server Administrators.**`
     )
     .setColor(0x2b2d31)
+    .setThumbnail(guild.iconURL({ size: 1024 }) ?? null)
     .setImage("https://files.catbox.moe/uul77u.png");
 
   const profiles = await listProfiles(guild.id);
