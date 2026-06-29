@@ -13,6 +13,9 @@ import { getGuildCommands } from "../registry";
 import { COLORS, CE, EMOJI } from "../utils/embedStyle";
 
 const CATEGORIES = [
+  { id: "overview", label: "Overview & Help", emoji: "🏠", desc: "Main menu", commands: [] },
+  { id: "setup", label: "Setup Guide", emoji: "🛠️", desc: "How to setup the bot", commands: [] },
+  { id: "faq", label: "FAQ", emoji: "❓", desc: "Frequently Asked Questions", commands: [] },
   { id: "mod", label: "Moderation", emoji: CE.moderation.str, desc: "Tools to keep your server safe", commands: ["ban", "kick", "mute", "unmute", "warn", "unwarn", "timeout", "untimeout", "jail", "unjail", "case", "edit-case", "modhistory", "purge", "lock", "unlock", "slowmode", "nuke", "appeal"] },
   { id: "staff", label: "Staff & Admin", emoji: CE.admin.str, desc: "Server configuration and staff tracking", commands: ["config", "bot-admin", "ai-admin", "loa", "staff-report", "promote", "demote", "staff-roles", "bot-check", "maintenance", "whitelist", "whitelist-global", "verify-owner", "setup"] },
   { id: "economy", label: "Economy & Levels", emoji: CE.cash.str, desc: "Ranks, shop, and currency", commands: ["rank", "leaderboard", "give-xp", "slots"] },
@@ -56,6 +59,46 @@ const command: SlashCommand = {
 
     const buildEmbed = (categoryId: string) => {
       const cat = localCategories.find(c => c.id === categoryId);
+      
+      if (categoryId === "overview") {
+        return new EmbedBuilder()
+          .setTitle(`${CE.success.str} Relosta Bot Help Menu`)
+          .setColor(COLORS.primary)
+          .setDescription(`Welcome to the help menu! Use the dropdown below to explore commands by category or to view our Setup Guide and FAQ.\n\n${localCategories.filter(c => !["overview", "setup", "faq", "other"].includes(c.id)).map(c => `> ${c.emoji} **${c.label}** — ${categoryMap.get(c.id)?.length || 0} cmds`).join("\n")}`)
+          .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
+      }
+
+      if (categoryId === "setup") {
+        return new EmbedBuilder()
+          .setTitle(`🛠️ Relosta Bot Setup Guide`)
+          .setColor(COLORS.primary)
+          .setDescription(`Follow these steps to fully configure Relosta Bot for your server:\n\n` + 
+            `**1. Configuration Menu**\n` + 
+            `Run </config:0> to open the main configuration panel. This interactive menu will allow you to set up logging channels, moderation settings, and toggle active modules.\n\n` + 
+            `**2. Role Hierarchy**\n` + 
+            `Make sure to drag the **Relosta Bot** role above all other normal roles in your Server Settings -> Roles. The bot cannot moderate users who have a role higher than it.\n\n` + 
+            `**3. Staff & Permissions**\n` + 
+            `Use the </config:0> command to set the "Moderator Role" and "Admin Role" so your staff can use the bot's commands.\n\n` + 
+            `**4. Automations**\n` + 
+            `Automations (like Anti-Spam or Anti-Raid) can be toggled inside the config menu. Make sure to set your logging channels so you receive alerts when automations trigger!`)
+          .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
+      }
+
+      if (categoryId === "faq") {
+        return new EmbedBuilder()
+          .setTitle(`❓ Frequently Asked Questions`)
+          .setColor(COLORS.primary)
+          .setDescription(`**Q: Why is the bot saying "Interaction Failed"?**\n` +
+            `A: This usually means the bot restarted recently and the old buttons/menus in chat have expired. Just re-run the command to get a fresh menu.\n\n` +
+            `**Q: The bot says it can't ban/kick someone, why?**\n` +
+            `A: The bot's highest role must be placed physically higher in the server role list than the user you are trying to punish. Also check that the bot has the correct permissions.\n\n` +
+            `**Q: How do I backup my server?**\n` +
+            `A: Use the </server-backup:0> command to create and load backups. Make sure you don't share backup IDs publicly!\n\n` +
+            `**Q: How do cross-server bans work?**\n` +
+            `A: Our system can propagate bans across multiple linked servers to keep out known threats. You can toggle this feature in your config.`)
+          .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
+      }
+
       const cmds = categoryMap.get(categoryId) || [];
       
       return new EmbedBuilder()
@@ -63,7 +106,7 @@ const command: SlashCommand = {
         .setColor(COLORS.primary)
         .setDescription(
           cmds.length > 0 
-            ? cmds.map(c => `**\`/${c.data.name}\`** ${EMOJI.dot} ${c.data.description}`).join("\n")
+            ? cmds.map(c => `**\`/${c.data.name}\`** — ${c.data.description}`).join("\n")
             : "*No commands found in this category.*"
         )
         .setFooter({ text: `Total commands in category: ${cmds.length}` });
@@ -91,16 +134,8 @@ const command: SlashCommand = {
       return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
     };
 
-    // Initial state: show first category (or home/overview)
-    // Let's create an overview embed first.
-    const overviewEmbed = new EmbedBuilder()
-      .setTitle(`${CE.success.str} Relosta Bot Commands`)
-      .setColor(COLORS.primary)
-      .setDescription(`Welcome to the help menu! Use the dropdown below to explore commands by category.\n\n${localCategories.map(c => `> ${c.emoji} **${c.label}** — ${categoryMap.get(c.id)?.length || 0} cmds`).join("\n")}`)
-      .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
-
     const message = await interaction.editReply({
-      embeds: [overviewEmbed],
+      embeds: [buildEmbed("overview")],
       components: [buildMenu("overview")],
     });
 
