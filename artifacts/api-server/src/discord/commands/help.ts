@@ -36,9 +36,11 @@ const command: SlashCommand = {
 
     CATEGORIES.forEach(c => categoryMap.set(c.id, []));
 
+    const localCategories = [...CATEGORIES];
+
     for (const cmd of allCommands) {
       let found = false;
-      for (const cat of CATEGORIES) {
+      for (const cat of localCategories) {
         if (cat.commands.includes(cmd.data.name)) {
           categoryMap.get(cat.id)?.push(cmd);
           found = true;
@@ -49,11 +51,11 @@ const command: SlashCommand = {
     }
     if (uncategorized.length > 0) {
       categoryMap.set("other", uncategorized);
-      CATEGORIES.push({ id: "other", label: "Other", emoji: CE.folder.str, desc: "Uncategorized commands", commands: [] });
+      localCategories.push({ id: "other", label: "Other", emoji: CE.folder.str, desc: "Uncategorized commands", commands: [] });
     }
 
     const buildEmbed = (categoryId: string) => {
-      const cat = CATEGORIES.find(c => c.id === categoryId);
+      const cat = localCategories.find(c => c.id === categoryId);
       const cmds = categoryMap.get(categoryId) || [];
       
       return new EmbedBuilder()
@@ -72,7 +74,7 @@ const command: SlashCommand = {
         .setCustomId("help_category_select")
         .setPlaceholder("Select a command category...");
 
-      for (const cat of CATEGORIES) {
+      for (const cat of localCategories) {
         // Skip "other" if it's empty
         if (cat.id === "other" && (!categoryMap.has("other") || categoryMap.get("other")!.length === 0)) continue;
         
@@ -94,7 +96,7 @@ const command: SlashCommand = {
     const overviewEmbed = new EmbedBuilder()
       .setTitle(`${CE.success.str} Relosta Bot Commands`)
       .setColor(COLORS.primary)
-      .setDescription(`Welcome to the help menu! Use the dropdown below to explore commands by category.\n\n${CATEGORIES.map(c => `> ${c.emoji} **${c.label}** — ${categoryMap.get(c.id)?.length || 0} cmds`).join("\n")}`)
+      .setDescription(`Welcome to the help menu! Use the dropdown below to explore commands by category.\n\n${localCategories.map(c => `> ${c.emoji} **${c.label}** — ${categoryMap.get(c.id)?.length || 0} cmds`).join("\n")}`)
       .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
 
     const message = await interaction.editReply({
