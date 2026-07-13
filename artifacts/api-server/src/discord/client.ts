@@ -16,6 +16,7 @@ import { bumpMessage } from "./storage/quota";
 
 import { getTicketsConfig, createOpenTicket, closeOpenTicket, claimTicket, getOpenTicketsByUser, getOpenTicketByChannel, getNextTicketNumber } from "./storage/tickets";
 import { getAutomodConfig, recordSpam, recordDuplicate } from "./storage/automod";
+import { containsProhibitedLanguage } from "./utils/profanityDetector";
 import { getActiveGiveaways, updateGiveaway } from "./storage/giveaways";
 import { logDmToWebhook } from "./utils/dmWebhook";
 import { initPermWhitelist } from "./storage/whitelist";
@@ -825,11 +826,13 @@ export async function startDiscordBot(): Promise<void> {
           if ((am.duplicates.enabled || am.enabled) && !exempted(am.duplicates)) {
             if (recordDuplicate(message.guildId, message.author.id, content)) { await doAction(am.duplicates.action || "delete", "Duplicate message", am.duplicates.muteDurationMinutes || 10); return; }
           }
-          // Bad words (custom + built-in profanity)
+          // Bad words (multi-language profanity, sensitive terms, masking attempts + custom words)
           if ((am.badWords.enabled || am.enabled) && !exempted(am.badWords)) {
-            const builtInWords = ["fuck", "shit", "bitch", "asshole", "cunt", "nigger", "faggot", "retard", "whore", "slut"];
-            const allWords = [...builtInWords, ...(am.badWords.words || [])];
-            if (allWords.some((w) => content.toLowerCase().includes(w.toLowerCase()))) { await doAction(am.badWords.action || "delete", "Prohibited language detected", am.badWords.muteDurationMinutes || 10); return; }
+            const check = containsProhibitedLanguage(content, am.badWords.words || []);
+            if (check.prohibited) {
+              await doAction(am.badWords.action || "delete", `Prohibited language detected (${check.word || "bad word"})`, am.badWords.muteDurationMinutes || 10);
+              return;
+            }
           }
           // Invites
           if ((am.invites.enabled || am.enabled) && !exempted(am.invites) && /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.com\/invite)\//i.test(content)) {

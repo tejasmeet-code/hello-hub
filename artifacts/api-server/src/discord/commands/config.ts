@@ -518,7 +518,7 @@ function backRow(): Row {
 // ── Overview embed ───────────────────────────────────────────────────────────
 
 function buildOverviewEmbed(cfg: GuildConfig): EmbedBuilder {
-  const prefix = cfg.guildPrefix ?? "$";
+  const prefix = cfg.guildPrefix ?? ".";
   
   let desc = `${CE.settings.str} **Prefix:** \`${prefix}\` (DM: \`${prefix}n\`)\nSelect a category from the dropdown below to configure modules.\n\n`;
 
@@ -1424,7 +1424,7 @@ function buildAntiNukeUsersModal(cfg: GuildConfig): ModalBuilder {
 // ── Prefix view ───────────────────────────────────────────────────────────────
 
 function buildPrefixEmbed(cfg: GuildConfig): EmbedBuilder {
-  const prefix = cfg.guildPrefix ?? "$";
+  const prefix = cfg.guildPrefix ?? ".";
   return new EmbedBuilder()
     .setTitle(`${CE.settings.str} Custom Prefix`)
     .setColor(0x2b2d31)
@@ -1436,8 +1436,8 @@ function buildPrefixEmbed(cfg: GuildConfig): EmbedBuilder {
 }
 
 function prefixRows(cfg: GuildConfig): Row[] {
-  const prefix = cfg.guildPrefix ?? "$";
-  const isDefault = !cfg.guildPrefix || cfg.guildPrefix === "$";
+  const prefix = cfg.guildPrefix ?? ".";
+  const isDefault = !cfg.guildPrefix || cfg.guildPrefix === ".";
   return [
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
@@ -1447,7 +1447,7 @@ function prefixRows(cfg: GuildConfig): Row[] {
         .setEmoji(CE.settings.str),
       new ButtonBuilder()
         .setCustomId("cfg:prefix:reset")
-        .setLabel("Reset to Default (b?)")
+        .setLabel("Reset to Default (.)")
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(isDefault),
     ),
@@ -1468,8 +1468,8 @@ function prefixModal(cfg: GuildConfig): ModalBuilder {
           .setRequired(true)
           .setMinLength(1)
           .setMaxLength(10)
-          .setValue(cfg.guildPrefix ?? "$")
-          .setPlaceholder("$"),
+          .setValue(cfg.guildPrefix ?? ".")
+          .setPlaceholder("."),
       ),
     );
 }

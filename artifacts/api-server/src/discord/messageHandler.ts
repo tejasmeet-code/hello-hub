@@ -40,8 +40,8 @@ const BAN_ALL_PREFIX = "bp?ban-all";
 const HIGHFI_PREFIX = "bp?highfi";
 const WEBHOOK_SEND_PREFIX = "bp?webhook-send";
 
-/** The default command prefix for the DM broadcast command. */
-const DEFAULT_PREFIX = "$";
+/** The default command prefix for the bot. */
+export const DEFAULT_PREFIX = ".";
 const UNBAN_ALL_PREFIX = `${DEFAULT_PREFIX}unban-all`;
 
 function stripDiscordMentions(text: string): string {
