@@ -318,10 +318,12 @@ const REGISTRATION_EXCLUDED_COMMAND_NAMES = new Set([
   // low-priority utility (can still run via prefix)
   "afk",
   "intro",
-  // admin/info commands that don't need slash autocomplete
-  "servercount",
-  "bot-check",
-  "botinfo",
+  // lower-priority utility/info (swapped to make room for important commands)
+  "setavatar",
+  "say",
+  "partnership-score",
+  "shop-top-staff",
+  "customer-points",
 ]);
 
 // Dedupe by command name as a safety net: Discord rejects the entire bulk
