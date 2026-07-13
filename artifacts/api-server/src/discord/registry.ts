@@ -318,6 +318,10 @@ const REGISTRATION_EXCLUDED_COMMAND_NAMES = new Set([
   // low-priority utility (can still run via prefix)
   "afk",
   "intro",
+  // admin/info commands that don't need slash autocomplete
+  "servercount",
+  "bot-check",
+  "botinfo",
 ]);
 
 // Dedupe by command name as a safety net: Discord rejects the entire bulk
@@ -344,12 +348,19 @@ export function getGlobalCommands(): SlashCommand[] {
 }
 
 export function getGuildCommands(): SlashCommand[] {
-  return commands.filter(
+  const filtered = commands.filter(
     (cmd) =>
       !cmd.globalOnly &&
       !cmd.globalWhitelistOnly &&
       !REGISTRATION_EXCLUDED_COMMAND_NAMES.has(cmd.data.name),
   );
+  if (filtered.length > 98) {
+    console.warn(
+      `[registry] Guild command count ${filtered.length} exceeds safe limit (98) — truncating. Add more entries to REGISTRATION_EXCLUDED_COMMAND_NAMES.`,
+    );
+    return filtered.slice(0, 98);
+  }
+  return filtered;
 }
 
 export function getCommandMap(): Map<string, SlashCommand> {
