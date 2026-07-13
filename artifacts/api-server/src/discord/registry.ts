@@ -132,6 +132,7 @@ import giveaway from "./commands/giveaway";
 import rank from "./commands/rank";
 import leaderboard from "./commands/leaderboard";
 import giveXp from "./commands/give-xp";
+import responseChannel from "./commands/response-channel";
 
 const allCommands: SlashCommand[] = [
   antinuke,
@@ -270,6 +271,7 @@ const allCommands: SlashCommand[] = [
   premiumUserCommand,
   premiumServerCommand,
   premiumGenerateCommand,
+  responseChannel,
 ];
 
 // Discord allows max 100 application commands per scope. The old registry was
@@ -278,7 +280,7 @@ const allCommands: SlashCommand[] = [
 // update, so nothing appears. Keep /whitelist as the single manager command and
 // keep lower-priority prank/game commands out of slash registration.
 const REGISTRATION_EXCLUDED_COMMAND_NAMES = new Set([
-  // prank / chaos commands
+  // prank / chaos commands (keep handlers but hide from slash autocomplete)
   "channel-shuffle",
   "cursed-nicknames",
   "emoji-channels",
@@ -288,12 +290,19 @@ const REGISTRATION_EXCLUDED_COMMAND_NAMES = new Set([
   "scramble-channels",
   "scramble-roles",
   "slots",
-  "spooky",
+  "spooky",   // legacy name kept in case
+  "theme",    // spooky.ts was renamed to "theme"
   "upside-down",
   "wordscramble",
   // trivia / quiz
   "trivia",
-  // pure fun / game commands (keep handler but no autocomplete entry)
+  // game commands
+  "connect4",
+  "hangman",
+  "higherlower",
+  "guess",
+  "channel-guess",
+  // pure fun / social commands
   "choice",
   "coinflip",
   "fortune",
@@ -304,6 +313,11 @@ const REGISTRATION_EXCLUDED_COMMAND_NAMES = new Set([
   "rps",
   "tictactoe",
   "wouldyourather",
+  "8ball",
+  "ship",
+  // low-priority utility (can still run via prefix)
+  "afk",
+  "intro",
 ]);
 
 // Dedupe by command name as a safety net: Discord rejects the entire bulk
