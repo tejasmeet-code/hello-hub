@@ -82,17 +82,21 @@ export async function handlePortalInteraction(interaction: Interaction) {
     // Fetch all members to ensure role.members is accurate
     await interaction.guild?.members.fetch();
 
-    const activeStaff: { userId: string; roleName: string }[] = [];
+    const activeStaffMap = new Map<string, { userId: string; roleName: string; position: number }>();
     for (const rId of portalRoleIds) {
       const role = interaction.guild?.roles.cache.get(rId);
       if (role) {
         for (const member of role.members.values()) {
-          if (!activeStaff.some(s => s.userId === member.id)) {
-            activeStaff.push({ userId: member.id, roleName: role.name });
-          }
+          const highestHoisted = member.roles.cache.filter(r => r.hoist).sort((a, b) => b.position - a.position).first() || member.roles.highest;
+          activeStaffMap.set(member.id, {
+            userId: member.id,
+            roleName: highestHoisted ? highestHoisted.name : role.name,
+            position: highestHoisted ? highestHoisted.position : role.position,
+          });
         }
       }
     }
+    const activeStaff = Array.from(activeStaffMap.values()).sort((a, b) => b.position - a.position);
 
     const totalPages = Math.ceil(activeStaff.length / PAGE_SIZE) || 1;
     const safePage = Math.max(0, Math.min(page, totalPages - 1));
@@ -115,7 +119,7 @@ export async function handlePortalInteraction(interaction: Interaction) {
               label: name,
               description: `${p.roleName} | ID: ${p.userId}`,
               value: p.userId,
-              emoji: { name: "👤" }
+              emoji: { id: CE.members.id }
             }
           ]);
         } catch (e) {
@@ -169,12 +173,14 @@ export async function handlePortalInteraction(interaction: Interaction) {
     const ratingSum = profile?.ratingSum ?? 0;
     const ratingCount = profile?.ratingCount ?? 0;
     const avgRating = ratingCount > 0 ? ratingSum / ratingCount : null;
+    const highestHoisted = member.roles.cache.filter(r => r.hoist).sort((a, b) => b.position - a.position).first() || member.roles.highest;
     
     const embed = new EmbedBuilder()
       .setTitle(`Staff Profile: ${member.user.username}`)
       .setThumbnail(member.user.displayAvatarURL())
       .setColor(0x2b2d31)
       .addFields(
+        { name: "Highest Role", value: highestHoisted ? `<@&${highestHoisted.id}>` : "None", inline: true },
         { name: "Average Rating", value: formatStarRating(avgRating), inline: true },
         { name: "Reviews", value: `${ratingCount}`, inline: true }
       );

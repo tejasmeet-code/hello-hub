@@ -50,6 +50,10 @@ export interface AiAutomodRule extends AutomodBaseRule {
 export interface AutomodConfig {
   enabled: boolean;
   logChannelId?: string;
+  whitelistUserIds?: string[];
+  whitelistRoleIds?: string[];
+  whitelistChannelIds?: string[];
+  whitelistCategoryIds?: string[];
   spam: SpamRule;
   badWords: BadWordsRule;
   links: LinksRule;
@@ -71,6 +75,10 @@ export function defaultAutomodConfig(): AutomodConfig {
   };
   return {
     enabled: false,
+    whitelistUserIds: [],
+    whitelistRoleIds: [],
+    whitelistChannelIds: [],
+    whitelistCategoryIds: [],
     spam: { ...baseRule, threshold: 5, windowSeconds: 5 },
     badWords: { ...baseRule, words: [] },
     links: { ...baseRule, whitelist: [] },

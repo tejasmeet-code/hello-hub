@@ -4,6 +4,7 @@ import adduser from "./commands/adduser";
 import aiAdmin from "./commands/ai-admin";
 import botCheck from "./commands/bot-check";
 import announce from "./commands/announce";
+import automod from "./commands/automod";
 import automations from "./commands/automations";
 import appeal from "./commands/appeal";
 import avatar from "./commands/avatar";
@@ -11,6 +12,7 @@ import banRequest from "./commands/ban-request";
 import ban from "./commands/ban";
 import blacklist from "./commands/blacklist";
 import botAdmin from "./commands/bot-admin";
+import botAnnounce from "./commands/bot-announce";
 import botinfo from "./commands/botinfo";
 import caseCommand from "./commands/case";
 import channelGuess from "./commands/channelGuess";
@@ -133,6 +135,7 @@ const allCommands: SlashCommand[] = [
   aiAdmin,
   botCheck,
   announce,
+  automod,
   automations,
   appeal,
   avatar,
@@ -140,6 +143,7 @@ const allCommands: SlashCommand[] = [
   ban,
   blacklist,
   botAdmin,
+  botAnnounce,
   botinfo,
   caseCommand,
   channelGuess,

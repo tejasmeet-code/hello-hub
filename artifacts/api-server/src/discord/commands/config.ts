@@ -2883,20 +2883,41 @@ const command: SlashCommand = {
         }
 
         if (id === "cfg:staffDir:spawn") {
-          if (!i.channel || !("send" in i.channel)) {
-            await i.reply({ content: `${CE.error.str} You must run this command in a text channel.`, flags: 1 << 6 });
+          if (!i.guild) return;
+
+          const cfg = await getGuildConfig(i.guild.id);
+          const targetChannelId = cfg.channels.staffDirectoryLog || cfg.channels.staffFeedbackLog;
+          if (!targetChannelId) {
+            await i.reply({
+              content: `${CE.error.str} Please set the Staff Directory / Feedback panel channel first using **Set Channel**.`,
+              flags: 1 << 6,
+            });
             return;
           }
-          if (!i.guild) return;
-          
+
+          const targetChannel =
+            i.guild.channels.cache.get(targetChannelId) ??
+            (await i.guild.channels.fetch(targetChannelId).catch(() => null));
+
+          if (!targetChannel || !targetChannel.isTextBased()) {
+            await i.reply({
+              content: `${CE.error.str} Configured channel (<#${targetChannelId}>) could not be found or is not a text channel.`,
+              flags: 1 << 6,
+            });
+            return;
+          }
+
           const payload = await buildPortalMessage(i.guild);
           if (payload.components.length === 0) {
             await i.reply({ content: `${CE.error.str} The Staff Directory module is disabled.`, flags: 1 << 6 });
             return;
           }
-          
-          await i.channel.send(payload);
-          await i.reply({ content: `${CE.success.str} Staff Directory Portal has been spawned in this channel.`, flags: 1 << 6 });
+
+          await targetChannel.send(payload);
+          await i.reply({
+            content: `${CE.success.str} Staff Directory Portal has been spawned in <#${targetChannel.id}>.`,
+            flags: 1 << 6,
+          });
           return;
         }
 

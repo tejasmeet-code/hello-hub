@@ -768,9 +768,29 @@ export async function startDiscordBot(): Promise<void> {
         if (am.enabled) {
           const member = message.member;
           const content = message.content || "";
-          const exempted = (r: { exemptRoleIds: string[]; exemptChannelIds: string[] }) =>
-            r.exemptRoleIds.some((id) => member.roles.cache.has(id)) || r.exemptChannelIds.includes(message.channelId);
+          const exempted = (r: { exemptRoleIds?: string[]; exemptChannelIds?: string[] }) => {
+            if (am.whitelistUserIds?.includes(member.id)) return true;
+            if (am.whitelistChannelIds?.includes(message.channelId)) return true;
+            if (message.channel && "parentId" in message.channel && message.channel.parentId && am.whitelistCategoryIds?.includes(message.channel.parentId)) return true;
+            if (am.whitelistRoleIds?.some((id) => member.roles.cache.has(id))) return true;
+            return (
+              (r.exemptRoleIds?.some((id) => member.roles.cache.has(id)) ?? false) ||
+              (r.exemptChannelIds?.includes(message.channelId) ?? false)
+            );
+          };
           const doAction = async (action: string, reason: string, muteDuration: number) => {
+            const { EmbedBuilder: EB } = await import("discord.js");
+            const dmEmbed = new EB()
+              .setTitle(`${CE.automod.str} Automod Violation & Action`)
+              .setColor(0xed4245)
+              .setDescription(`Automod triggered on your message in **${message.guild?.name || "the server"}**.`)
+              .addFields(
+                { name: "Violation / Reason", value: reason, inline: true },
+                { name: "Punishment / Action", value: action.toUpperCase() + (action === "mute" ? ` (${muteDuration} mins)` : ""), inline: true }
+              )
+              .setTimestamp();
+            await message.author.send({ embeds: [dmEmbed] }).catch(() => null);
+
             await message.delete().catch(() => {});
             if (action === "warn") {
               await message.channel.send({ content: `${CE.warning.str} ${member} — **Automod Warning**: ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 8000)).catch(() => {});
@@ -789,7 +809,6 @@ export async function startDiscordBot(): Promise<void> {
             if (am.logChannelId) {
               const logCh = message.guild?.channels.cache.get(am.logChannelId) as any;
               if (logCh?.send) {
-                const { EmbedBuilder: EB } = await import("discord.js");
                 await logCh.send({ embeds: [new EB().setColor(0xed4245).setTitle(`${CE.automod.str} Automod`).addFields(
                   { name: "User", value: `${member} (${member.id})`, inline: true }, { name: "Action", value: action, inline: true },
                   { name: "Reason", value: reason, inline: true }, { name: "Channel", value: `<#${message.channelId}>`, inline: true },

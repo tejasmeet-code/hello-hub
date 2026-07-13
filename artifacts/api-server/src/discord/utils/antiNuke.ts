@@ -140,6 +140,22 @@ export async function applyPunishment(
   reason: string,
 ): Promise<void> {
   try {
+    if (punishment !== "none") {
+      const user = await guild.client.users.fetch(targetId).catch(() => null);
+      if (user) {
+        const dmEmbed = new EmbedBuilder()
+          .setTitle(`${CE.admin.str} Anti-Nuke Action Taken`)
+          .setColor(0xed4245)
+          .setDescription(`An anti-nuke protection action was triggered in **${guild.name}**.`)
+          .addFields(
+            { name: "Violation / Reason", value: reason, inline: true },
+            { name: "Punishment / Action", value: PUNISHMENT_LABELS[punishment] ?? punishment, inline: true }
+          )
+          .setTimestamp();
+        await user.send({ embeds: [dmEmbed] }).catch(() => null);
+      }
+    }
+
     switch (punishment) {
       case "kick": {
         const member =

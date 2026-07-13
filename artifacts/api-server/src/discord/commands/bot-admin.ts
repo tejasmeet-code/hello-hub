@@ -1,21 +1,50 @@
 import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
+  EmbedBuilder,
 } from "discord.js";
 import type { SlashCommand } from "../types";
-import { BASE_PERM_WHITELIST } from "../storage/whitelist";
+import { BASE_PERM_WHITELIST, PERM_WHITELIST } from "../storage/whitelist";
 import { getJailRoleId, ensureJailRole, releaseJailFromMember } from "../storage/jail";
 import { recordModStat } from "../storage/modstats";
-import { successEmbed, errorEmbed, infoEmbed } from "../utils/embedStyle";
+import { successEmbed, errorEmbed, infoEmbed, CE } from "../utils/embedStyle";
+import { sendGlobalBotNotification } from "../utils/globalNotification";
 
 /**
- * /bot-admin — Developer-only command to perform moderation actions in any
- * guild the bot is in. Restricted to BASE_PERM_WHITELIST user IDs only.
+ * /bot-admin — Developer & Bot Admin command to perform moderation actions or global broadcasts.
  */
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("bot-admin")
-    .setDescription("[Bot Dev only] Perform a moderation action in any guild by ID.")
+    .setDescription("[Bot Admin only] Perform actions across servers or global announcements.")
+    .addSubcommand((sub) =>
+      sub
+        .setName("announce")
+        .setDescription("Announce a message to set bot notification channel in every server bot is in.")
+        .addStringOption((o) =>
+          o
+            .setName("mode")
+            .setDescription("Announcement format mode")
+            .setRequired(true)
+            .addChoices(
+              { name: "Embed Only", value: "embed" },
+              { name: "Text Only", value: "text" },
+              { name: "Both (Text + Embed)", value: "both" }
+            )
+        )
+        .addStringOption((o) =>
+          o.setName("message").setDescription("Announcement text / embed description").setRequired(true)
+        )
+        .addStringOption((o) =>
+          o.setName("title").setDescription("Optional embed title").setRequired(false)
+        )
+        .addStringOption((o) =>
+          o.setName("text_above").setDescription("Optional text above embed (for Both mode)").setRequired(false)
+        )
+        .addStringOption((o) =>
+          o.setName("image_url").setDescription("Optional image URL for embed").setRequired(false)
+        )
+    )
     .addSubcommand((sub) =>
       sub
         .setName("unjail")
@@ -43,13 +72,43 @@ const command: SlashCommand = {
     .setDMPermission(false),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    // Strictly restricted to bot developers
-    if (!BASE_PERM_WHITELIST.has(interaction.user.id)) {
-      await interaction.reply({ embeds: [errorEmbed("Access denied", "This command is restricted to bot developers.")] , flags: 1 << 6 });
+    if (!PERM_WHITELIST.has(interaction.user.id)) {
+      await interaction.reply({ embeds: [errorEmbed("Access denied", "This command is restricted to Bot Admins.")] , flags: 1 << 6 });
       return;
     }
 
     const sub = interaction.options.getSubcommand();
+
+    if (sub === "announce") {
+      await interaction.deferReply({ flags: 1 << 6 });
+      const mode = interaction.options.getString("mode", true) as "embed" | "text" | "both";
+      const message = interaction.options.getString("message", true);
+      const title = interaction.options.getString("title") ?? undefined;
+      const textAbove = interaction.options.getString("text_above") ?? undefined;
+      const imageUrl = interaction.options.getString("image_url") ?? undefined;
+
+      const res = await sendGlobalBotNotification(interaction.client, {
+        mode,
+        message,
+        title,
+        textAbove,
+        imageUrl,
+      });
+
+      const resultEmbed = new EmbedBuilder()
+        .setTitle(`${CE.announce.str} Global Bot Announcement Sent`)
+        .setColor(0x57f287)
+        .addFields(
+          { name: "Servers Notified", value: `${res.sentCount}`, inline: true },
+          { name: "Failed / No Channel", value: `${res.failCount}`, inline: true },
+          { name: "Format Mode", value: mode.toUpperCase(), inline: true }
+        )
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [resultEmbed] });
+      return;
+    }
+
     const guildId = interaction.options.getString("guild_id", true).trim();
     const userId = interaction.options.getString("user_id", true).trim();
     const reason = interaction.options.getString("reason") ?? "Bot admin action";
