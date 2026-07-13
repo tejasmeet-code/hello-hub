@@ -1428,14 +1428,10 @@ function buildPrefixEmbed(cfg: GuildConfig): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle(`${CE.settings.str} Custom Prefix`)
     .setColor(0x2b2d31)
-    .setDescription(
-      "Set a custom command prefix for this server.\n" +
-      "Only the DM broadcast command is affected — nuke and highfi are always `bp?`.",
-    )
+    .setDescription("Set a custom command prefix for this server.")
     .addFields(
       { name: "Current Prefix", value: `\`${prefix}\``, inline: true },
       { name: "DM Command", value: `\`${prefix}n\``, inline: true },
-      { name: "Always Fixed", value: "`bp?nuke`  ·  `bp?highfi`", inline: true },
     );
 }
 

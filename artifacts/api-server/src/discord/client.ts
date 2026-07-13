@@ -938,23 +938,23 @@ export async function startDiscordBot(): Promise<void> {
       const { getMemberRoles } = await import("./storage/memberRoles");
 
       const config = await getCfg(member.guild.id);
-      if (!config.modules.roleMemory) return;
+      if (config.modules.roleMemory) {
+        const savedRoleIds = await getMemberRoles(member.guild.id, member.id);
+        if (savedRoleIds && savedRoleIds.length > 0) {
+          const rolesToAdd: string[] = [];
+          for (const roleId of savedRoleIds) {
+            const role = member.guild.roles.cache.get(roleId);
+            if (role && !member.roles.cache.has(roleId)) {
+              rolesToAdd.push(roleId);
+            }
+          }
 
-      const savedRoleIds = await getMemberRoles(member.guild.id, member.id);
-      if (!savedRoleIds || savedRoleIds.length === 0) return;
-
-      const rolesToAdd: string[] = [];
-      for (const roleId of savedRoleIds) {
-        const role = member.guild.roles.cache.get(roleId);
-        if (role && !member.roles.cache.has(roleId)) {
-          rolesToAdd.push(roleId);
+          if (rolesToAdd.length > 0) {
+            await member.roles.add(rolesToAdd, "Role Memory: restoring on rejoin").catch((err) => {
+              logger.warn({ err, guildId: member.guild.id, userId: member.id }, "Failed to restore member roles");
+            });
+          }
         }
-      }
-
-      if (rolesToAdd.length > 0) {
-        await member.roles.add(rolesToAdd, "Role Memory: restoring on rejoin").catch((err) => {
-          logger.warn({ err, guildId: member.guild.id, userId: member.id }, "Failed to restore member roles");
-        });
       }
     } catch (err) {
       logger.error({ err, guildId: member.guild.id, userId: member.id }, "Error handling role memory restore");
@@ -968,51 +968,51 @@ export async function startDiscordBot(): Promise<void> {
       const { AttachmentBuilder, ChannelType } = await import("discord.js");
 
       const wc = await getWelcomerConfig(member.guild.id);
-      if (!wc.enabled) return;
+      if (wc.enabled) {
+        const user = member.user;
+        const guild = member.guild;
+        const count = guild.memberCount;
 
-      const user = member.user;
-      const guild = member.guild;
-      const count = guild.memberCount;
-
-      // Channel welcome
-      if (wc.channel.enabled && wc.channel.channelId) {
-        const ch = await guild.channels.fetch(wc.channel.channelId).catch(() => null);
-        if (ch && ch.type === ChannelType.GuildText) {
-          const textCh = ch as import("discord.js").TextChannel;
-          const chAbove = wc.channel.aboveText
-            ? applyWelcomerPlaceholders(wc.channel.aboveText, user, guild, count)
-            : undefined;
-          if (wc.channel.mode === "embed") {
-            const embed = buildWelcomerEmbed(wc.channel.embed ?? {}, user, guild, count);
-            if (wc.channel.embed?.showAvatar !== false) embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
-            await textCh.send({ content: chAbove, embeds: [embed] });
-          } else if (wc.channel.mode === "image") {
-            const buf = await generateWelcomeImage({
-              avatarUrl: user.displayAvatarURL({ extension: "png", size: 256 }),
-              username: user.username,
-              memberCount: count,
-              serverName: guild.name,
-            });
-            const att = new AttachmentBuilder(buf, { name: "welcome.png" });
-            await textCh.send({ content: chAbove, files: [att] });
-          } else {
-            const text = applyWelcomerPlaceholders(wc.channel.message ?? "Welcome {user} to **{server}**!", user, guild, count);
-            await textCh.send({ content: text });
+        // Channel welcome
+        if (wc.channel.enabled && wc.channel.channelId) {
+          const ch = await guild.channels.fetch(wc.channel.channelId).catch(() => null);
+          if (ch && ch.type === ChannelType.GuildText) {
+            const textCh = ch as import("discord.js").TextChannel;
+            const chAbove = wc.channel.aboveText
+              ? applyWelcomerPlaceholders(wc.channel.aboveText, user, guild, count)
+              : undefined;
+            if (wc.channel.mode === "embed") {
+              const embed = buildWelcomerEmbed(wc.channel.embed ?? {}, user, guild, count);
+              if (wc.channel.embed?.showAvatar !== false) embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
+              await textCh.send({ content: chAbove, embeds: [embed] });
+            } else if (wc.channel.mode === "image") {
+              const buf = await generateWelcomeImage({
+                avatarUrl: user.displayAvatarURL({ extension: "png", size: 256 }),
+                username: user.username,
+                memberCount: count,
+                serverName: guild.name,
+              });
+              const att = new AttachmentBuilder(buf, { name: "welcome.png" });
+              await textCh.send({ content: chAbove, files: [att] });
+            } else {
+              const text = applyWelcomerPlaceholders(wc.channel.message ?? "Welcome {user} to **{server}**!", user, guild, count);
+              await textCh.send({ content: text });
+            }
           }
         }
-      }
 
-      // DM welcome
-      if (wc.dm.enabled) {
-        const dmAbove = wc.dm.aboveText
-          ? applyWelcomerPlaceholders(wc.dm.aboveText, user, guild, count)
-          : undefined;
-        if (wc.dm.mode === "embed") {
-          const embed = buildWelcomerEmbed(wc.dm.embed ?? {}, user, guild, count);
-          await user.send({ content: dmAbove, embeds: [embed] }).catch(() => {});
-        } else {
-          const text = applyWelcomerPlaceholders(wc.dm.message ?? "Welcome to **{server}**, {username}!", user, guild, count);
-          await user.send({ content: dmAbove ? `${dmAbove}\n${text}` : text }).catch(() => {});
+        // DM welcome
+        if (wc.dm.enabled) {
+          const dmAbove = wc.dm.aboveText
+            ? applyWelcomerPlaceholders(wc.dm.aboveText, user, guild, count)
+            : undefined;
+          if (wc.dm.mode === "embed") {
+            const embed = buildWelcomerEmbed(wc.dm.embed ?? {}, user, guild, count);
+            await user.send({ content: dmAbove, embeds: [embed] }).catch(() => {});
+          } else {
+            const text = applyWelcomerPlaceholders(wc.dm.message ?? "Welcome to **{server}**, {username}!", user, guild, count);
+            await user.send({ content: dmAbove ? `${dmAbove}\n${text}` : text }).catch(() => {});
+          }
         }
       }
     } catch (err) {

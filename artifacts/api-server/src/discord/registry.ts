@@ -58,6 +58,7 @@ import ping from "./commands/ping";
 import poll from "./commands/poll";
 import postProof from "./commands/post-proof";
 import preset from "./commands/preset";
+import privateTicket from "./commands/private-ticket";
 import profile from "./commands/profile";
 import promote from "./commands/promote";
 import pull from "./commands/pull";
@@ -185,6 +186,7 @@ const allCommands: SlashCommand[] = [
   poll,
   postProof,
   preset,
+  privateTicket,
   profile,
   promote,
   pull,
