@@ -4,6 +4,8 @@ import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ComponentType,
   type ChatInputCommandInteraction,
   type MessageActionRowComponentBuilder
@@ -11,16 +13,20 @@ import {
 import type { SlashCommand } from "../types";
 import { getGuildCommands } from "../registry";
 import { COLORS, CE, EMOJI } from "../utils/embedStyle";
+import { getGuildConfig } from "../storage/config";
+
+const SUPPORT_SERVER_URL = "https://discord.gg/gFgAfpSYdp";
 
 const CATEGORIES: { id: string; label: string; emoji: string; desc: string; commands: string[] }[] = [
   { id: "overview", label: "Overview & Help", emoji: CE.information.str, desc: "Main menu", commands: [] },
-  { id: "setup", label: "Setup Guide", emoji: CE.settings.str, desc: "How to setup the bot", commands: [] },
+  { id: "premium", label: "Premium Tier & Features", emoji: CE.cash.str, desc: "Premium perks, NLP No-Prefix routing, license codes", commands: ["premium-user", "premium-server", "auto-react", "afk"] },
+  { id: "setup", label: "Setup Guide", emoji: CE.settings.str, desc: "How to setup the bot and role hierarchy", commands: ["setup"] },
   { id: "faq", label: "FAQ", emoji: CE.clipboard.str, desc: "Frequently Asked Questions", commands: [] },
   { id: "mod", label: "Moderation", emoji: CE.moderation.str, desc: "Tools to keep your server safe", commands: ["ban", "kick", "mute", "unmute", "warn", "unwarn", "timeout", "untimeout", "jail", "unjail", "case", "edit-case", "modhistory", "purge", "lock", "unlock", "slowmode", "nuke", "appeal"] },
   { id: "staff", label: "Staff & Admin", emoji: CE.admin.str, desc: "Server configuration and staff tracking", commands: ["config", "bot-admin", "ai-admin", "loa", "staff-report", "promote", "demote", "staff-roles", "bot-check", "maintenance", "whitelist", "bot-admins", "verify-owner", "setup"] },
   { id: "economy", label: "Economy & Levels", emoji: CE.cash.str, desc: "Ranks, shop, and currency", commands: ["rank", "leaderboard", "give-xp", "slots"] },
   { id: "fun", label: "Fun & Games", emoji: CE.giveaway.str, desc: "Games, minigames, and fun commands", commands: ["8ball", "coinflip", "roll", "rps", "tictactoe", "connect4", "hangman", "trivia", "wouldyourather", "wordscramble", "meme", "ship", "spooky", "guess", "higherlower", "russianroulette"] },
-  { id: "utility", label: "Utility & Info", emoji: CE.information.str, desc: "Useful tools and information", commands: ["help", "ping", "serverinfo", "userinfo", "botinfo", "roleinfo", "avatar", "setavatar", "servercount", "poll", "announce", "dm", "note", "pull", "giveaway", "staff-database"] },
+  { id: "utility", label: "Utility & Info", emoji: CE.information.str, desc: "Useful tools and information", commands: ["help", "ping", "serverinfo", "userinfo", "botinfo", "roleinfo", "avatar", "setavatar", "servercount", "poll", "announce", "dm", "note", "pull", "giveaway", "staff-database", "afk"] },
 ];
 
 const command: SlashCommand = {
@@ -105,6 +111,24 @@ const command: SlashCommand = {
           .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
       }
 
+      if (categoryId === "premium") {
+        return new EmbedBuilder()
+          .setTitle(`${CE.cash.str} Relosta Bot — Premium Tier & Features`)
+          .setColor(0xF1C40F)
+          .setDescription(
+            `Unlock powerful enterprise-grade features and exclusive perks for your server or user account!\n\n` +
+              `**💎 How to Purchase Premium**\n` +
+              `To purchase a valid Premium License Code, you must **join our Official Support Server and open a support ticket** using the link button below: ${SUPPORT_SERVER_URL}\n\n` +
+              `**⚡ Premium Perks & Commands**\n` +
+              `• **"No-Prefix" NLP Command Routing Engine**: Qualified premium users can invoke any command in chat naturally without prefix or syntax constraints (e.g. typing \`ban @user\` instead of \`.ban @user\`).\n` +
+              `• **\`/premium-user {code}\`**: Activate user-level global premium.\n` +
+              `• **\`/premium-server {code}\`**: Activate server-level premium.\n` +
+              `• **\`/auto-react\`**: Map custom emoji auto-reactions to Users, Channels, or Categories.\n` +
+              `• **\`/afk\`**: Advanced AFK tracking with Global or Server-Only scope selection.`,
+          )
+          .setThumbnail(interaction.client.user?.displayAvatarURL() || null);
+      }
+
       const cmds = categoryMap.get(categoryId) || [];
       
       return new EmbedBuilder()
@@ -124,7 +148,6 @@ const command: SlashCommand = {
         .setPlaceholder("Select a command category...");
 
       for (const cat of localCategories) {
-        // Skip "other" if it's empty
         if (cat.id === "other" && (!categoryMap.has("other") || categoryMap.get("other")!.length === 0)) continue;
         
         menu.addOptions(
@@ -140,14 +163,23 @@ const command: SlashCommand = {
       return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
     };
 
+    const buildSupportRow = () => {
+      return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel("Official Support Server (Purchase Premium)")
+          .setStyle(ButtonStyle.Link)
+          .setURL(SUPPORT_SERVER_URL),
+      );
+    };
+
     const message = await interaction.editReply({
       embeds: [buildEmbed("overview")],
-      components: [buildMenu("overview")],
+      components: [buildMenu("overview"), buildSupportRow()],
     });
 
     const collector = message.createMessageComponentCollector({
       componentType: ComponentType.StringSelect,
-      time: 300_000, // 5 minutes
+      time: 300_000,
     });
 
     collector.on("collect", async (i) => {
@@ -155,16 +187,15 @@ const command: SlashCommand = {
         const catId = i.values[0];
         await i.update({
           embeds: [buildEmbed(catId)],
-          components: [buildMenu(catId)],
+          components: [buildMenu(catId), buildSupportRow()],
         });
       }
     });
 
     collector.on("end", async () => {
-      // Disable the select menu when the collector ends
       const disabledMenu = buildMenu("").components[0].setDisabled(true);
       const disabledRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(disabledMenu);
-      await interaction.editReply({ components: [disabledRow] }).catch(() => {});
+      await interaction.editReply({ components: [disabledRow, buildSupportRow()] }).catch(() => {});
     });
   },
 };

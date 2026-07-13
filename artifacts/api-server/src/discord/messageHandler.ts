@@ -138,6 +138,13 @@ export async function handlePrefixMessage(message: Message): Promise<void> {
       const command = commandMap.get(cmd.toLowerCase());
 
       if (command) {
+        const cfg = await getGuildConfig(guild.id);
+        if (!cfg.setupWizardCompleted && command.data.name !== "setup" && command.data.name !== "help") {
+          await message.reply({
+            content: "⚠️ Normal command usage is restricted until a server administrator runs the `/setup` onboarding wizard.",
+          }).catch(() => {});
+          return;
+        }
         await handleGenericPrefixCommand(message, guild, member, command, argParts);
         return;
       }

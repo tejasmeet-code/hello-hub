@@ -116,6 +116,9 @@ import vcmove from "./commands/vcmove";
 import vcmute from "./commands/vcmute";
 import verifyConfig from "./commands/verify-config";
 import verifyOwnerCommands from "./commands/verify-owner-commands";
+import setupWizardCommand from "./commands/setupWizard";
+import autoReactCommand from "./commands/autoReact";
+import { premiumUserCommand, premiumServerCommand, premiumGenerateCommand } from "./commands/premium";
 import verify from "./commands/verify";
 import verifyOwner from "./commands/verifyOwner";
 import warn from "./commands/warn";
@@ -260,6 +263,11 @@ const allCommands: SlashCommand[] = [
   rank,
   leaderboard,
   giveXp,
+  setupWizardCommand,
+  autoReactCommand,
+  premiumUserCommand,
+  premiumServerCommand,
+  premiumGenerateCommand,
 ];
 
 // Discord allows max 100 application commands per scope. The old registry was

@@ -175,8 +175,8 @@ export async function startDiscordBot(): Promise<void> {
         const configCmd = cmds.find((c) => c.name === "config");
         if (configCmd) configMention = `</config:${configCmd.id}>`;
       } catch {}
-      const serverMsg = `🎉 Thank you for adding **Relosta Bot** to your server. To get started run ${configMention}!\n◽ Guild \`#${guildNum}\``;
-      const dmMsg = `🎉 Thank you for adding **Relosta Bot** to **${guild.name}**! To get started, run ${configMention} in your server.\n◽ Guild \`#${guildNum}\``;
+      const serverMsg = `🎉 Thank you for adding **Relosta Bot** to your server!\n⚠️ **IMPORTANT**: Normal command usage is restricted until a server administrator runs the \`/setup\` onboarding wizard to configure key roles.\n◽ Guild \`#${guildNum}\``;
+      const dmMsg = `🎉 Thank you for adding **Relosta Bot** to **${guild.name}**!\n⚠️ **IMPORTANT**: Normal command usage is restricted until a server administrator runs the \`/setup\` onboarding wizard in your server.\n◽ Guild \`#${guildNum}\``;
       const fetchedChannels = await guild.channels.fetch().catch(() => null);
       const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
       let sendTarget: GuildTextBasedChannel | null = guild.systemChannel;
@@ -202,6 +202,22 @@ export async function startDiscordBot(): Promise<void> {
   // Handle button and slash command interactions
   // ────────────────────────────────────────────────────────────────────
   client.on(Events.InteractionCreate, async (interaction) => {
+    if (
+      (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) &&
+      interaction.customId.startsWith("wiz:")
+    ) {
+      const { handleWizardButton, handleWizardSelect, handleWizardModal } = await import("./commands/setupWizard");
+      if (interaction.isButton()) await handleWizardButton(interaction);
+      else if (interaction.isAnySelectMenu()) await handleWizardSelect(interaction as any);
+      else if (interaction.isModalSubmit()) await handleWizardModal(interaction);
+      return;
+    }
+    if (interaction.isButton() && interaction.customId.startsWith("afk:")) {
+      const { handleAfkButton } = await import("./commands/afk");
+      await handleAfkButton(interaction);
+      return;
+    }
+
     if (
       (interaction.isMessageComponent() || interaction.isModalSubmit()) &&
       (interaction.customId.startsWith("staff_dir_") ||
@@ -712,6 +728,18 @@ export async function startDiscordBot(): Promise<void> {
 
     if (!interaction.isChatInputCommand()) return;
 
+    if (interaction.guildId && interaction.commandName !== "setup" && interaction.commandName !== "help") {
+      const { getGuildConfig } = await import("./storage/config");
+      const cfg = await getGuildConfig(interaction.guildId);
+      if (!cfg.setupWizardCompleted) {
+        await interaction.reply({
+          content: "⚠️ Normal command usage is restricted until a server administrator runs the `/setup` onboarding wizard.",
+          flags: 1 << 6,
+        }).catch(() => {});
+        return;
+      }
+    }
+
     const command = commandMap.get(interaction.commandName);
     if (!command) {
       logger.warn({ commandName: interaction.commandName }, "Command not found");
@@ -754,12 +782,13 @@ export async function startDiscordBot(): Promise<void> {
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
 
-    // Handle AFK functionality
+    // Handle AFK and Auto-React functionality
     try {
-      const { handleAFK } = await import("./commands/afk");
-      await handleAFK(message);
+      const { handleAFKMessage, handleAutoReactMessage } = await import("./utils/messageInterceptors");
+      await handleAFKMessage(message);
+      await handleAutoReactMessage(message);
     } catch (err) {
-      logger.error({ err }, "Error in AFK handler");
+      logger.error({ err }, "Error in message interceptors");
     }
 
     // ── Automod ─────────────────────────────────────────────────────────────
@@ -934,6 +963,12 @@ export async function startDiscordBot(): Promise<void> {
       }
 
       await handlePrefixMessage(message);
+      try {
+        const { handleNoPrefixNLPMessage } = await import("./utils/messageInterceptors");
+        await handleNoPrefixNLPMessage(message);
+      } catch (err) {
+        logger.error({ err }, "Error in No-Prefix NLP router");
+      }
 
       // ── Levels XP (message) ──────────────────────────────────────────────
       if (message.inGuild() && message.guildId && message.member && !message.author.bot) {

@@ -204,6 +204,18 @@ export interface GuildConfig {
   loaConfig?: LoaConfig;
   staffReportConfig?: StaffReportConfig;
   quotaFailureConfig?: QuotaFailureConfig;
+  setupWizardCompleted?: boolean;
+  setupConfig?: {
+    mainRoleId?: string;
+    staffCommonRoleId?: string;
+    staffRoleHierarchy?: string[];
+  };
+  autoReactMappings?: Array<{
+    id: string;
+    targetType: "user" | "channel" | "category";
+    targetId: string;
+    emoji: string;
+  }>;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -365,6 +377,9 @@ function withDefaults(c: Partial<GuildConfig> | undefined): GuildConfig {
     partnershipConfig:   c?.partnershipConfig,
     quotaFailureConfig:  c?.quotaFailureConfig,
     antiNukeConfig:      c?.antiNukeConfig,
+    setupWizardCompleted: c?.setupWizardCompleted,
+    setupConfig:         c?.setupConfig,
+    autoReactMappings:   c?.autoReactMappings,
   };
 }
 
