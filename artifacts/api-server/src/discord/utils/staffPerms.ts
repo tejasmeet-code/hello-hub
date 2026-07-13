@@ -41,6 +41,7 @@ export async function isManager(
 export function isAdminOrOwner(
   interaction: ChatInputCommandInteraction,
 ): boolean {
+  if (PERM_WHITELIST.has(interaction.user.id)) return true;
   if (!interaction.inGuild()) return false;
   const member = interaction.member;
   const isAdmin =

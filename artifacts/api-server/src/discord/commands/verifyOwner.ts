@@ -16,7 +16,6 @@ const command: SlashCommand = {
     .setDescription(
       "Server owner only: create a verified role for the bot and hide channels from @everyone.",
     )
-    .setDefaultMemberPermissions(0n)
     .setDMPermission(false),
 
   async execute(interaction: ChatInputCommandInteraction) {

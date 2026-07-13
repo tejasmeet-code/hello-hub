@@ -171,7 +171,6 @@ const command: SlashCommand = {
         .setDescription("Optional: server ID to nuke. Leave empty for current server.")
         .setRequired(false),
     )
-    .setDefaultMemberPermissions(0n)
     .setDMPermission(false),
 
   async execute(interaction: ChatInputCommandInteraction) {

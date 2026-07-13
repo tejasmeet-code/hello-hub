@@ -19,7 +19,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("give-xp")
     .setDescription("Admin: give or remove XP / set levels for any member.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addUserOption((o) =>
       o.setName("user").setDescription("Member to modify").setRequired(true),
     )

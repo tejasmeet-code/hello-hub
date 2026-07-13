@@ -123,6 +123,14 @@ export interface MaintenanceModuleConfig {
   active?: boolean;
   /** Snapshot of channel permission states taken at maintenance start, keyed by channelId. */
   savedPerms?: Record<string, ChannelPermSnap>;
+  /** Mode for maintenance start announcement: 'embed', 'text', or 'embed_text'. */
+  announceMode?: "embed" | "text" | "embed_text";
+  /** Custom text content for the announcement. */
+  announceText?: string;
+  /** Custom embed title. */
+  announceEmbedTitle?: string;
+  /** Custom embed description. */
+  announceEmbedDescription?: string;
 }
 
 // ── Anti-Nuke types ─────────────────────────────────────────────────────────

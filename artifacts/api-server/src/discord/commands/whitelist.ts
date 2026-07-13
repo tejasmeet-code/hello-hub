@@ -20,7 +20,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("whitelist")
     .setDescription("Manage command-specific whitelists for this server.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addSubcommand((sub) =>
       sub

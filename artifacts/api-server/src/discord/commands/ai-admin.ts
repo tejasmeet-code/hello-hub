@@ -284,7 +284,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("ai-admin")
     .setDescription("[UNDER DEVELOPMENT] Use AI to perform server admin tasks — shows a plan before executing anything.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addStringOption((o) =>
       o

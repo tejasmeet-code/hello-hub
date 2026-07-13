@@ -158,6 +158,7 @@ export async function startDiscordBot(): Promise<void> {
       cancelGuildDeletion(guild.id).catch(() => {});
       await takeBackup(guild, "join");
       ensureJailRole(guild).catch(() => {});
+      import("./commands/maintenance").then((m) => m.autoSetupMaintenanceOnJoin(guild)).catch(() => {});
       await registerGuildCommands(client, guild.id).catch(() => {});
       const guildNum = await incrementGuildCount();
       await new Promise((r) => setTimeout(r, 3000));
@@ -200,7 +201,12 @@ export async function startDiscordBot(): Promise<void> {
   // Handle button and slash command interactions
   // ────────────────────────────────────────────────────────────────────
   client.on(Events.InteractionCreate, async (interaction) => {
-    if ((interaction.isMessageComponent() || interaction.isModalSubmit()) && (interaction.customId.startsWith("staff_dir_") || interaction.customId.startsWith("staff_modal_"))) {
+    if (
+      (interaction.isMessageComponent() || interaction.isModalSubmit()) &&
+      (interaction.customId.startsWith("staff_dir_") ||
+        interaction.customId.startsWith("staff_modal_") ||
+        interaction.customId.startsWith("staff_portal_"))
+    ) {
       const { handlePortalInteraction } = await import("./handlers/portalHandler");
       try {
         await handlePortalInteraction(interaction);

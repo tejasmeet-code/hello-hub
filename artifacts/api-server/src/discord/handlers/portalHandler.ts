@@ -18,8 +18,16 @@ import { listProfiles, addStaffRating, setFeedbackCooldown, getProfile } from ".
 import { getQuota, currentWeekStart } from "../storage/quota";
 import { getActiveInfractions } from "../storage/staff";
 import { errorEmbed, successEmbed } from "../utils/embedStyle";
+import { isAdminOrOwner } from "../utils/staffPerms";
 
 const PAGE_SIZE = 25;
+
+function formatStarRating(avgRating: number | null): string {
+  if (avgRating === null || isNaN(avgRating)) return "No ratings yet";
+  const normalized = avgRating > 5 ? avgRating / 2 : avgRating;
+  const clamped = Math.max(0, Math.min(5, Math.round(normalized)));
+  return "⭐".repeat(clamped) + "☆".repeat(5 - clamped) + ` (${normalized.toFixed(1)}/5)`;
+}
 
 export async function buildPortalMessage(guild: Guild) {
   const config = await getGuildConfig(guild.id);
@@ -160,14 +168,14 @@ export async function handlePortalInteraction(interaction: Interaction) {
 
     const ratingSum = profile?.ratingSum ?? 0;
     const ratingCount = profile?.ratingCount ?? 0;
-    const rating = ratingCount > 0 ? (ratingSum / ratingCount).toFixed(1) : "N/A";
+    const avgRating = ratingCount > 0 ? ratingSum / ratingCount : null;
     
     const embed = new EmbedBuilder()
       .setTitle(`Staff Profile: ${member.user.username}`)
       .setThumbnail(member.user.displayAvatarURL())
       .setColor(0x2b2d31)
       .addFields(
-        { name: "Average Rating", value: rating !== "N/A" ? `${rating}/10 🌟` : "No ratings yet", inline: true },
+        { name: "Average Rating", value: formatStarRating(avgRating), inline: true },
         { name: "Reviews", value: `${ratingCount}`, inline: true }
       );
 
@@ -180,12 +188,12 @@ export async function handlePortalInteraction(interaction: Interaction) {
         .setCustomId(`staff_dir_feedback_${targetId}`)
         .setLabel("Rate Staff")
         .setStyle(ButtonStyle.Success)
-        .setEmoji("🌟"),
+        .setEmoji(CE.level?.id ?? "1517480037719212032"),
       new ButtonBuilder()
         .setCustomId(`staff_dir_complaint_${targetId}`)
         .setLabel("File Complaint")
         .setStyle(ButtonStyle.Danger)
-        .setEmoji("⚠️")
+        .setEmoji(CE.warning?.id ?? "1517468806186799125")
     );
 
     await interaction.editReply({ content: "", embeds: [embed], components: [row] });
@@ -199,11 +207,11 @@ export async function handlePortalInteraction(interaction: Interaction) {
 
     const ratingInput = new TextInputBuilder()
       .setCustomId("rating")
-      .setLabel("Rating (1-10)")
+      .setLabel("Rating (1-5 stars)")
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setMinLength(1)
-      .setMaxLength(2);
+      .setMaxLength(1);
 
     const commentsInput = new TextInputBuilder()
       .setCustomId("comments")
@@ -251,8 +259,8 @@ export async function handlePortalInteraction(interaction: Interaction) {
     const comments = interaction.fields.getTextInputValue("comments");
     
     let rating = parseInt(ratingStr, 10);
-    if (isNaN(rating) || rating < 1 || rating > 10) {
-      await interaction.editReply({ embeds: [errorEmbed("Invalid Rating", "Please provide a number between 1 and 10.")] });
+    if (isNaN(rating) || rating < 1 || rating > 5) {
+      await interaction.editReply({ embeds: [errorEmbed("Invalid Rating", "Please provide a rating between 1 and 5 stars.")] });
       return;
     }
 
@@ -279,6 +287,71 @@ export async function handlePortalInteraction(interaction: Interaction) {
     await logFeedback(interaction, targetId, "Complaint", null, comments);
     await interaction.editReply({ embeds: [successEmbed("Complaint Submitted", "Thank you! Your complaint has been securely submitted to the management team.")] });
   }
+
+  if (interaction.isButton() && interaction.customId.startsWith("staff_portal_reply_")) {
+    if (!(await isAdminOrOwner(interaction as any))) {
+      await interaction.reply({
+        embeds: [errorEmbed("Permission Denied", "Only Server Administrators can reply to staff feedback.")],
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const submitterId = interaction.customId.replace("staff_portal_reply_", "");
+    const modal = new ModalBuilder()
+      .setCustomId(`staff_portal_modal_${submitterId}`)
+      .setTitle("Reply to Submitter via DM");
+
+    const msgInput = new TextInputBuilder()
+      .setCustomId("reply_msg")
+      .setLabel("Response Message")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setMaxLength(1500);
+
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(msgInput));
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId.startsWith("staff_portal_modal_")) {
+    await interaction.deferReply({ ephemeral: true });
+    if (!(await isAdminOrOwner(interaction as any))) {
+      await interaction.editReply({
+        embeds: [errorEmbed("Permission Denied", "Only Server Administrators can reply to staff feedback.")],
+      });
+      return;
+    }
+
+    const submitterId = interaction.customId.replace("staff_portal_modal_", "");
+    const replyText = interaction.fields.getTextInputValue("reply_msg");
+
+    const submitter = await interaction.client.users.fetch(submitterId).catch(() => null);
+    if (!submitter) {
+      await interaction.editReply({
+        embeds: [errorEmbed("User Not Found", "Could not fetch the submitter to send a DM.")],
+      });
+      return;
+    }
+
+    const dmEmbed = new EmbedBuilder()
+      .setTitle("💬 Response to your Staff Feedback / Complaint")
+      .setDescription(`Server Management from **${interaction.guild?.name || "the server"}** has replied to your submission:\n\n>>> ${replyText}`)
+      .setColor(COLORS.info ?? 0x3498db)
+      .setFooter({ text: `Replied by Admin (${interaction.user.tag})` })
+      .setTimestamp();
+
+    try {
+      await submitter.send({ embeds: [dmEmbed] });
+      await interaction.editReply({
+        embeds: [successEmbed("Reply Sent", `Successfully sent response DM to <@${submitterId}>.`)],
+      });
+    } catch {
+      await interaction.editReply({
+        embeds: [errorEmbed("DM Failed", `Could not deliver DM to <@${submitterId}> (they may have DMs disabled).`)],
+      });
+    }
+  }
 }
 
 async function logFeedback(interaction: Interaction, targetId: string, type: "Feedback" | "Complaint", rating: number | null, comments: string) {
@@ -303,10 +376,18 @@ async function logFeedback(interaction: Interaction, targetId: string, type: "Fe
     .setTimestamp();
 
   if (rating !== null) {
-    embed.addFields({ name: "Rating", value: `${rating}/10`, inline: true });
+    embed.addFields({ name: "Rating", value: formatStarRating(rating), inline: true });
   }
 
   embed.addFields({ name: "Comments", value: comments || "No comments provided." });
 
-  await channel.send({ embeds: [embed] }).catch(() => null);
+  const replyRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`staff_portal_reply_${interaction.user.id}`)
+      .setLabel("Reply to Submitter via DM")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji(CE.information?.id ?? "1517488940381376512")
+  );
+
+  await channel.send({ embeds: [embed], components: [replyRow] }).catch(() => null);
 }

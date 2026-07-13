@@ -41,7 +41,6 @@ const command: SlashCommand = {
     .addSubcommand((sub) =>
       sub.setName("list").setDescription("View all blocked server IDs"),
     )
-    .setDefaultMemberPermissions(0n)
     .setDMPermission(true),
 
   async execute(interaction: ChatInputCommandInteraction) {

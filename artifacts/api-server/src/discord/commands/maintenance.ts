@@ -10,6 +10,7 @@ import {
   type ButtonInteraction,
   type Role,
   type GuildChannel,
+  type Guild,
 } from "discord.js";
 import type { SlashCommand } from "../types";
 import {
@@ -150,21 +151,42 @@ export async function handleMaintenanceButton(
 
     // ── 3. Announce ──────────────────────────────────────────────────────────
     if (mc.announcementsChannelId) {
-      const announceCh = guild.channels.cache.get(mc.announcementsChannelId);
+      const announceCh =
+        guild.channels.cache.get(mc.announcementsChannelId) ??
+        (await guild.channels.fetch(mc.announcementsChannelId).catch(() => null));
       if (announceCh?.isTextBased()) {
-        await announceCh
-          .send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle(`${CE.settings.str} Server Maintenance Has Started`)
-                .setDescription(
-                  "The server is currently undergoing maintenance. Members can only access the maintenance area.\n\nThank you for your patience!",
-                )
-                .setColor(0xe74c3c)
-                .setTimestamp(),
-            ],
-          })
-          .catch(() => {});
+        const mode = mc.announceMode ?? "embed";
+        const defaultText =
+          "The server is currently undergoing maintenance. Members can only access the maintenance area.\n\nThank you for your patience!";
+        const textContent = mc.announceText || defaultText;
+        const embedTitle = mc.announceEmbedTitle || `${CE.settings.str} Server Maintenance Has Started`;
+        const embedDesc = mc.announceEmbedDescription || textContent;
+
+        const payload: any = {};
+        if (mode === "text") {
+          payload.content = textContent;
+        } else if (mode === "embed") {
+          payload.embeds = [
+            new EmbedBuilder()
+              .setTitle(embedTitle)
+              .setDescription(embedDesc)
+              .setColor(0xe74c3c)
+              .setTimestamp(),
+          ];
+        } else {
+          // embed_text
+          payload.content = textContent;
+          payload.embeds = [
+            new EmbedBuilder()
+              .setTitle(embedTitle)
+              .setDescription(embedDesc)
+              .setColor(0xe74c3c)
+              .setTimestamp(),
+          ];
+        }
+        await announceCh.send(payload).catch((err) =>
+          logger.warn({ err, chId: mc.announcementsChannelId }, "Failed to send start announcement"),
+        );
       }
     }
 
@@ -203,7 +225,9 @@ export async function handleMaintenanceButton(
 
     // ── Announce ─────────────────────────────────────────────────────────────
     if (mc.announcementsChannelId) {
-      const announceCh = guild.channels.cache.get(mc.announcementsChannelId);
+      const announceCh =
+        guild.channels.cache.get(mc.announcementsChannelId) ??
+        (await guild.channels.fetch(mc.announcementsChannelId).catch(() => null));
       if (announceCh?.isTextBased()) {
         await announceCh
           .send({
@@ -258,6 +282,36 @@ const command: SlashCommand = {
             .setName("role")
             .setDescription("The role to lock during maintenance")
             .setRequired(true),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("set-message")
+        .setDescription("Customize the announcement message posted when maintenance starts")
+        .addStringOption((o) =>
+          o
+            .setName("mode")
+            .setDescription("Message format: embed, text, or embed+text")
+            .setRequired(true)
+            .addChoices(
+              { name: "Embed Only", value: "embed" },
+              { name: "Text Only", value: "text" },
+              { name: "Embed + Text", value: "embed_text" },
+            ),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("text")
+            .setDescription("Custom text or embed description")
+            .setRequired(false)
+            .setMaxLength(1500),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("title")
+            .setDescription("Custom embed title (for embed modes)")
+            .setRequired(false)
+            .setMaxLength(250),
         ),
     )
     .addSubcommand((sub) =>
@@ -445,6 +499,30 @@ const command: SlashCommand = {
       return;
     }
 
+    // ── set-message ──────────────────────────────────────────────────────────
+    if (sub === "set-message") {
+      const mode = interaction.options.getString("mode", true) as "embed" | "text" | "embed_text";
+      const text = interaction.options.getString("text") ?? undefined;
+      const title = interaction.options.getString("title") ?? undefined;
+
+      await updateGuildConfig(interaction.guildId, (c) => ({
+        ...c,
+        maintenanceConfig: {
+          ...c.maintenanceConfig,
+          announceMode: mode,
+          announceText: text,
+          announceEmbedTitle: title,
+          announceEmbedDescription: text,
+        },
+      }));
+
+      await interaction.reply({
+        content: `${CE.success.str} Updated maintenance announcement format to **${mode}**.${text ? `\nCustom Text: "${text}"` : ""}`,
+        flags: 1 << 6,
+      });
+      return;
+    }
+
     // ── panel ────────────────────────────────────────────────────────────────
     if (sub === "panel") {
       const active = cfg.maintenanceConfig?.active ?? false;
@@ -482,5 +560,66 @@ const command: SlashCommand = {
     }
   },
 };
+
+export async function autoSetupMaintenanceOnJoin(guild: Guild): Promise<void> {
+  try {
+    const cfg = await getGuildConfig(guild.id);
+    if (cfg.maintenanceConfig?.categoryId) {
+      return;
+    }
+
+    const categoryOverwrites: {
+      id: string;
+      deny?: bigint[];
+      allow?: bigint[];
+    }[] = [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+    ];
+
+    const category = await guild.channels.create({
+      name: "MAINTENANCE",
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: categoryOverwrites,
+      reason: "Automatic Maintenance setup upon bot joining",
+    });
+
+    const channelDefs = [
+      { key: "announcements", name: "announcements", topic: "Maintenance announcements" },
+      { key: "chat", name: "chat", topic: "General chat during maintenance" },
+      { key: "media", name: "media", topic: "Media sharing" },
+      { key: "cmds", name: "cmds", topic: "Bot commands" },
+    ] as const;
+
+    const channelIds: Record<string, string> = {};
+    for (const def of channelDefs) {
+      try {
+        const ch = await guild.channels.create({
+          name: def.name,
+          type: ChannelType.GuildText,
+          parent: category.id,
+          topic: def.topic,
+          reason: "Automatic Maintenance setup upon bot joining",
+        });
+        channelIds[def.key] = ch.id;
+      } catch (err) {
+        logger.warn({ err, name: def.name }, "Auto maintenance setup: failed to create channel");
+      }
+    }
+
+    await updateGuildConfig(guild.id, (c) => ({
+      ...c,
+      maintenanceConfig: {
+        ...c.maintenanceConfig,
+        categoryId: category.id,
+        announcementsChannelId: channelIds["announcements"],
+        chatChannelId: channelIds["chat"],
+        mediaChannelId: channelIds["media"],
+        cmdsChannelId: channelIds["cmds"],
+      },
+    }));
+  } catch (err) {
+    logger.warn({ err, guildId: guild.id }, "Failed autoSetupMaintenanceOnJoin");
+  }
+}
 
 export default command;

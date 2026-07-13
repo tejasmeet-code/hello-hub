@@ -2696,7 +2696,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("config")
     .setDescription("Open the bot configuration menu for this server.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
 
 

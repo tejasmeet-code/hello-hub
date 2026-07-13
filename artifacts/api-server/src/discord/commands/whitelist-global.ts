@@ -15,42 +15,42 @@ import {
 
 const command: SlashCommand = {
   data: new SlashCommandBuilder()
-    .setName("whitelist-global")
-    .setDescription("Manage the global (cross-server) bot whitelist.")
+    .setName("bot-admins")
+    .setDescription("Manage Bot Admin global access (can use any command across any server).")
     .addSubcommand((sub) =>
       sub
         .setName("add")
-        .setDescription("Grant a user global whitelist access.")
+        .setDescription("Grant a user Bot Admin global access.")
         .addStringOption((option) =>
           option
             .setName("user-id")
-            .setDescription("The Discord user ID to add")
+            .setDescription("The Discord user ID to add as Bot Admin")
             .setRequired(true),
         ),
     )
     .addSubcommand((sub) =>
       sub
         .setName("remove")
-        .setDescription("Revoke a user's global whitelist access.")
+        .setDescription("Revoke a user's Bot Admin global access.")
         .addStringOption((option) =>
           option
             .setName("user-id")
-            .setDescription("The Discord user ID to remove")
+            .setDescription("The Discord user ID to remove from Bot Admins")
             .setRequired(true),
         ),
     )
     .addSubcommand((sub) =>
       sub
         .setName("list")
-        .setDescription("Show everyone on the global whitelist."),
+        .setDescription("Show everyone with Bot Admin access."),
     )
     .setDMPermission(true),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    // Only existing global-whitelist members can manage the global whitelist.
+    // Only existing Bot Admins can manage the Bot Admin list.
     if (!PERM_WHITELIST.has(interaction.user.id)) {
       await interaction.reply({
-        content: "Only globally whitelisted users can manage this list.",
+        content: "Only existing Bot Admins can manage this list.",
         ephemeral: true,
       });
       return;
@@ -71,13 +71,13 @@ const command: SlashCommand = {
       const added = await addToPermWhitelist(userId);
       if (!added) {
         await interaction.reply({
-          content: `<@${userId}> (\`${userId}\`) is already on the global whitelist.`,
+          content: `<@${userId}> (\`${userId}\`) is already a Bot Admin.`,
           ephemeral: true,
         });
         return;
       }
       await interaction.reply(
-        `${CE.success.str} Added <@${userId}> (\`${userId}\`) to the global whitelist.`,
+        `${CE.success.str} Added <@${userId}> (\`${userId}\`) as a Bot Admin (global access to all commands).`,
       );
       return;
     }
@@ -102,13 +102,13 @@ const command: SlashCommand = {
       const removed = await removeFromPermWhitelist(userId);
       if (!removed) {
         await interaction.reply({
-          content: `<@${userId}> (\`${userId}\`) isn't on the global whitelist.`,
+          content: `<@${userId}> (\`${userId}\`) isn't a Bot Admin.`,
           ephemeral: true,
         });
         return;
       }
       await interaction.reply(
-        `🗑️ Removed <@${userId}> (\`${userId}\`) from the global whitelist.`,
+        `🗑️ Removed <@${userId}> (\`${userId}\`) from Bot Admins.`,
       );
       return;
     }
@@ -120,7 +120,7 @@ const command: SlashCommand = {
       const description =
         [...baseLines, ...extraLines].join("\n") || "*Nobody yet.*";
       const embed = new EmbedBuilder()
-        .setTitle("Global Whitelist")
+        .setTitle("Bot Admins (Global Access)")
         .setColor(0x2b2d31)
         .setDescription(description)
         .setFooter({

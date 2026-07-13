@@ -13,7 +13,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("staff-role-add")
     .setDescription("Register a Discord role as a staff role.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addRoleOption((o) =>
       o.setName("role").setDescription("The role to register").setRequired(true),
@@ -67,7 +66,6 @@ export const removeCommand: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("staff-role-remove")
     .setDescription("Unregister a staff role.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addRoleOption((o) =>
       o.setName("role").setDescription("The role to unregister").setRequired(true),

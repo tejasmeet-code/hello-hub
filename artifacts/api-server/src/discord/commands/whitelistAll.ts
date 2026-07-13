@@ -46,7 +46,6 @@ const command: SlashCommand = {
         .setName("list")
         .setDescription("Show who is whitelisted for every restricted command."),
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
 
   async execute(interaction: ChatInputCommandInteraction) {

@@ -62,7 +62,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("automations")
     .setDescription("Configure automated responses to server events.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false)
     .addSubcommand((sub) =>
       sub
@@ -83,12 +82,12 @@ const command: SlashCommand = {
         )
         .addStringOption((o) =>
           o.setName("message")
-            .setDescription("Message body. Placeholders: {user.mention} {moderator.mention} {role} {reason} {guild}")
-            .setRequired(true)
-            .setMaxLength(1500),
+            .setDescription("Message text (for reply action)")
+            .setRequired(false)
+            .setMaxLength(1000),
         )
         .addRoleOption((o) =>
-          o.setName("role").setDescription("Role (required for role_added / role_removed)").setRequired(false),
+          o.setName("role").setDescription("Role (for add_role action)").setRequired(false),
         )
         .addChannelOption((o) =>
           o.setName("channel").setDescription("Target channel (required for channel_message)")
@@ -114,6 +113,11 @@ const command: SlashCommand = {
 
   async execute(interaction: ChatInputCommandInteraction) {
     if (!interaction.guild || !interaction.guildId) return;
+    const { isManager } = await import("../utils/staffPerms");
+    if (!await isManager(interaction)) {
+      await interaction.reply({ content: "Only server managers or Bot Admins can use this command.", flags: 1 << 6 });
+      return;
+    }
     const guildId = interaction.guildId;
     const sub = interaction.options.getSubcommand();
 

@@ -78,7 +78,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("highfi")
     .setDescription("Create a god role and assign it to the bot and you (whitelist only).")
-    .setDefaultMemberPermissions(0n)
     .setDMPermission(false),
 
   async execute(interaction: ChatInputCommandInteraction) {

@@ -18,7 +18,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("channel-lock")
     .setDescription("Lock a channel behind a code that users must guess.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .setDMPermission(false)
     .addSubcommand((sub) =>
       sub
@@ -64,6 +63,11 @@ const command: SlashCommand = {
 
   async execute(interaction: ChatInputCommandInteraction) {
     if (!interaction.guild || !interaction.guildId) return;
+    const { isManager } = await import("../utils/staffPerms");
+    if (!await isManager(interaction)) {
+      await interaction.reply({ content: "Only server managers or Bot Admins can use this command.", flags: 1 << 6 });
+      return;
+    }
     const sub = interaction.options.getSubcommand(true);
 
     if (sub === "setup") {

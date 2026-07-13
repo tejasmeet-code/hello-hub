@@ -27,7 +27,6 @@ const command: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("connect-servers")
     .setDescription("Link this server to another (staff ↔ main).")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false)
     .addSubcommand((s) =>
       s
