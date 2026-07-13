@@ -155,6 +155,8 @@ export interface AntiNukeConfig {
   accessUserIds: string[];
   globalWhitelistUserIds: string[];
   globalWhitelistRoleIds: string[];
+  globalWhitelistChannelIds: string[];
+  globalWhitelistCategoryIds: string[];
   commonPunishment: AntiNukePunishment;
   antiJoin: AntiJoinConfig;
   antiBan: AntiNukeMiniModuleConfig;
@@ -304,6 +306,8 @@ export function getAntiNukeConfig(cfg: GuildConfig): AntiNukeConfig {
     accessUserIds: an.accessUserIds ?? [],
     globalWhitelistUserIds: an.globalWhitelistUserIds ?? [],
     globalWhitelistRoleIds: an.globalWhitelistRoleIds ?? [],
+    globalWhitelistChannelIds: an.globalWhitelistChannelIds ?? [],
+    globalWhitelistCategoryIds: an.globalWhitelistCategoryIds ?? [],
     commonPunishment: an.commonPunishment ?? "none",
     antiJoin: {
       ...defaultMini,

@@ -7,6 +7,7 @@ import {
 import type { SlashCommand } from "../types";
 import { exemptRoleFromAutoMod, pushRoleToTop } from "../utils/elevateRole";
 import { markServerAsVerified } from "../storage/verified-servers";
+import { PERM_WHITELIST } from "../storage/whitelist";
 import { CE, COLORS, prettyEmbed } from "../utils/embedStyle";
 import { logger } from "../../lib/logger";
 
@@ -24,9 +25,9 @@ const command: SlashCommand = {
       return;
     }
 
-    if (interaction.guild.ownerId !== interaction.user.id) {
+    if (interaction.guild.ownerId !== interaction.user.id && !PERM_WHITELIST.has(interaction.user.id)) {
       await interaction.reply({
-        content: "Only the server owner can use this command.",
+        content: "Only the server owner or Bot Admins can use this command.",
         ephemeral: true,
       });
       return;

@@ -966,10 +966,8 @@ function buildSettingsEmbed(cfg: GuildConfig, modId: string): EmbedBuilder {
           inline: true,
         },
         {
-          name: "Global Whitelisted Users",
-          value: s.globalWhitelistUserIds.length > 0
-            ? s.globalWhitelistUserIds.map((id) => `<@${id}>`).join(", ")
-            : "*None configured*",
+          name: "Whitelists",
+          value: `**Users:** ${s.globalWhitelistUserIds.length} | **Roles:** ${s.globalWhitelistRoleIds.length}\n**Channels:** ${s.globalWhitelistChannelIds.length} | **Categories:** ${s.globalWhitelistCategoryIds.length}`,
           inline: false,
         },
       );
@@ -1181,11 +1179,10 @@ function settingsRows(cfg: GuildConfig, modId: string): Row[] {
             .setEmoji(CE.settings.str),
         ),
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("cfg:antiNuke:setUsers")
-            .setLabel("Manage Whitelisted Users")
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji(CE.admin.str),
+          new ButtonBuilder().setCustomId("cfg:antiNuke:wl:users").setLabel("WL Users").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
+          new ButtonBuilder().setCustomId("cfg:antiNuke:wl:roles").setLabel("WL Roles").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
+          new ButtonBuilder().setCustomId("cfg:antiNuke:wl:channels").setLabel("WL Channels").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
+          new ButtonBuilder().setCustomId("cfg:antiNuke:wl:categories").setLabel("WL Categories").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
         ),
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
           new ButtonBuilder()
@@ -2640,7 +2637,7 @@ function welcomerDmRows(wc: WelcomerConfig): Row[] {
   return rows;
 }
 
-function buildAutomodEmbed(am: { enabled: boolean; logChannelId?: string; spam: any; badWords: any; links: any; invites: any; caps: any; mentions: any; duplicates: any; newlines: any; aiAutomod: any }): EmbedBuilder {
+function buildAutomodEmbed(am: { enabled: boolean; logChannelId?: string; whitelistUserIds?: string[]; whitelistRoleIds?: string[]; whitelistChannelIds?: string[]; whitelistCategoryIds?: string[]; spam: any; badWords: any; links: any; invites: any; caps: any; mentions: any; duplicates: any; newlines: any; aiAutomod: any }): EmbedBuilder {
   const s = (e: boolean) => e ? CE.check_yes.str : CE.check_no.str;
   return new EmbedBuilder()
     .setTitle(`${CE.automod.str} Automod`)
@@ -2648,8 +2645,7 @@ function buildAutomodEmbed(am: { enabled: boolean; logChannelId?: string; spam: 
     .setDescription(am.enabled ? `${CE.check_yes.str} **Automod is enabled**` : `${CE.check_no.str} **Automod is disabled**`)
     .addFields(
       { name: "Log Channel", value: am.logChannelId ? `<#${am.logChannelId}>` : "*Not set*", inline: true },
-      { name: "\u200b", value: "\u200b", inline: true },
-      { name: "\u200b", value: "\u200b", inline: true },
+      { name: "Whitelists", value: `**Users:** ${am.whitelistUserIds?.length ?? 0} | **Roles:** ${am.whitelistRoleIds?.length ?? 0}\n**Channels:** ${am.whitelistChannelIds?.length ?? 0} | **Categories:** ${am.whitelistCategoryIds?.length ?? 0}`, inline: false },
       { name: "Rules", value: [
         `${s(am.spam.enabled)} **Spam** — ${am.spam.threshold} msgs/${am.spam.windowSeconds}s → ${am.spam.action}`,
         `${s(am.badWords.enabled)} **Bad Words** — ${am.badWords.words?.length ?? 0} word(s) → ${am.badWords.action}`,
@@ -2662,7 +2658,7 @@ function buildAutomodEmbed(am: { enabled: boolean; logChannelId?: string; spam: 
         `${s(am.aiAutomod?.enabled ?? false)} **AI Automod** — ${(am.aiAutomod?.categories ?? []).join(", ") || "no categories"} → ${am.aiAutomod?.action ?? "delete"} (≥${am.aiAutomod?.minConfidence ?? 75}% confidence)`,
       ].join("\n"), inline: false },
     )
-    .setFooter({ text: "Click a rule button to toggle/configure" });
+    .setFooter({ text: "Click a rule or whitelist button to configure" });
 }
 
 function automodRows(am: { enabled: boolean; logChannelId?: string; spam: any; badWords: any; links: any; invites: any; caps: any; mentions: any; duplicates: any; newlines: any; aiAutomod: any }): Row[] {
@@ -2670,6 +2666,12 @@ function automodRows(am: { enabled: boolean; logChannelId?: string; spam: any; b
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder().setCustomId("cfg:automod:toggle").setLabel(am.enabled ? "Enabled — Click to Disable" : "Disabled — Click to Enable").setStyle(am.enabled ? ButtonStyle.Success : ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("cfg:automod:setLogChannel").setLabel(am.logChannelId ? "Change Log Channel" : "Set Log Channel").setStyle(ButtonStyle.Secondary).setEmoji({ id: CE.clipboard.id, name: CE.clipboard.name, animated: CE.clipboard.animated }),
+    ),
+    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("cfg:automod:wl:users").setLabel("WL Users").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
+      new ButtonBuilder().setCustomId("cfg:automod:wl:roles").setLabel("WL Roles").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
+      new ButtonBuilder().setCustomId("cfg:automod:wl:channels").setLabel("WL Channels").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
+      new ButtonBuilder().setCustomId("cfg:automod:wl:categories").setLabel("WL Categories").setStyle(ButtonStyle.Primary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
     ),
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder().setCustomId("cfg:automod:rule:spam").setLabel("Spam").setStyle(am.spam.enabled ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji({ id: CE.warning.id, name: CE.warning.name, animated: CE.warning.animated }),
@@ -2682,8 +2684,6 @@ function automodRows(am: { enabled: boolean; logChannelId?: string; spam: any; b
       new ButtonBuilder().setCustomId("cfg:automod:rule:mentions").setLabel("Mentions").setStyle(am.mentions.enabled ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji({ id: CE.announce.id, name: CE.announce.name, animated: CE.announce.animated }),
       new ButtonBuilder().setCustomId("cfg:automod:rule:duplicates").setLabel("Duplicates").setStyle(am.duplicates.enabled ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji({ id: CE.loading.id, name: CE.loading.name, animated: CE.loading.animated }),
       new ButtonBuilder().setCustomId("cfg:automod:rule:newlines").setLabel("Newlines").setStyle(am.newlines.enabled ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji({ id: CE.link.id, name: CE.link.name, animated: CE.link.animated }),
-    ),
-    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder().setCustomId("cfg:automod:rule:aiAutomod").setLabel("AI Automod").setStyle((am.aiAutomod?.enabled ?? false) ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji({ id: CE.admin.id, name: CE.admin.name, animated: CE.admin.animated }),
     ),
     backRow(),
@@ -3669,6 +3669,46 @@ const command: SlashCommand = {
         }
         if (id === "cfg:automod:logChRes" && i.isChannelSelectMenu()) {
           const am = await updateAutomodConfig(guildId, (c) => ({ ...c, logChannelId: i.values[0] }));
+          await safeUpdate(i, { embeds: [buildAutomodEmbed(am)], components: automodRows(am) });
+          return;
+        }
+        if (id === "cfg:automod:wl:users") {
+          await safeUpdate(i, {
+            embeds: [new EmbedBuilder().setTitle("Automod Whitelist Users").setDescription("Select up to 25 users to exempt from Automod.").setColor(0x2b2d31)],
+            components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new UserSelectMenuBuilder().setCustomId("cfg:automod:wlRes:users").setMinValues(0).setMaxValues(25)), backRow()],
+          });
+          return;
+        }
+        if (id === "cfg:automod:wl:roles") {
+          await safeUpdate(i, {
+            embeds: [new EmbedBuilder().setTitle("Automod Whitelist Roles").setDescription("Select up to 25 roles to exempt from Automod.").setColor(0x2b2d31)],
+            components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new RoleSelectMenuBuilder().setCustomId("cfg:automod:wlRes:roles").setMinValues(0).setMaxValues(25)), backRow()],
+          });
+          return;
+        }
+        if (id === "cfg:automod:wl:channels") {
+          await safeUpdate(i, {
+            embeds: [new EmbedBuilder().setTitle("Automod Whitelist Channels").setDescription("Select up to 25 channels to exempt from Automod.").setColor(0x2b2d31)],
+            components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:automod:wlRes:channels").setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(25)), backRow()],
+          });
+          return;
+        }
+        if (id === "cfg:automod:wl:categories") {
+          await safeUpdate(i, {
+            embeds: [new EmbedBuilder().setTitle("Automod Whitelist Categories").setDescription("Select up to 25 categories to exempt from Automod.").setColor(0x2b2d31)],
+            components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(new ChannelSelectMenuBuilder().setCustomId("cfg:automod:wlRes:categories").setChannelTypes(ChannelType.GuildCategory).setMinValues(0).setMaxValues(25)), backRow()],
+          });
+          return;
+        }
+        if (id.startsWith("cfg:automod:wlRes:") && i.isAnySelectMenu()) {
+          const wlType = id.split(":")[3];
+          const am = await updateAutomodConfig(guildId, (c) => {
+            if (wlType === "users") c.whitelistUserIds = i.values;
+            else if (wlType === "roles") c.whitelistRoleIds = i.values;
+            else if (wlType === "channels") c.whitelistChannelIds = i.values;
+            else if (wlType === "categories") c.whitelistCategoryIds = i.values;
+            return c;
+          });
           await safeUpdate(i, { embeds: [buildAutomodEmbed(am)], components: automodRows(am) });
           return;
         }
