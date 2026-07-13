@@ -16,6 +16,9 @@ export type ToxicCategory =
   | "slur"
   | "explicit"
   | "self_harm"
+  | "scam"
+  | "spam"
+  | "nsfw"
   | "safe";
 
 export interface AiAutomodResult {
@@ -86,6 +89,26 @@ const HARASSMENT_REGEXES: RegExp[] = [
   /\b(go\s*(die|kill\s*yourself|away\s*forever))\b/i,
   /\b(you\s*should\s*(die|not\s*exist|kill\s*yourself))\b/i,
   /\b(nobody\s*(loves|likes|wants)\s*you)\b/i,
+];
+
+/** Scam / Phishing patterns */
+const SCAM_REGEXES: RegExp[] = [
+  /\b(free\s*nitro|claim\s*your\s*nitro|steam\s*community\s*gift|discord\s*airdrop|crypto\s*giveaway)\b/i,
+  /\b(@everyone|@here)\s+.*(free\s*nitro|gift|claim|airdrop)\b/i,
+  /discord\.(gift|promotions|events|giveaway)\b/i,
+];
+
+/** Spam / Gibberish / Zalgo patterns */
+const SPAM_REGEXES: RegExp[] = [
+  /([a-z0-9])\1{7,}/i, // Repeated same character 8+ times e.g. aaaaaaaa
+  /[\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF]{4,}/, // Zalgo combining characters
+];
+
+/** NSFW / Adult content patterns */
+const NSFW_REGEXES: RegExp[] = [
+  /\b(pornhub|xvideos|onlyfans|brazzers|hentai|rule34|nude\s*pics|send\s*nudes|nsfw\s*content)\b/i,
+  /\b(porno?|erotica|xxx\s*videos?|hardcore\s*porn|nsfw\s*links?)\b/i,
+  /(https?:\/\/)?(www\.)?(pornhub|xvideos|xnxx|redtube|chaturbate|onlyfans)\.com/i,
 ];
 
 // Curated slur stems — normalise l33t speak before checking
@@ -189,6 +212,27 @@ export function classifyContent(
     }
   }
 
+  // Layer 7 — Scam / Phishing
+  for (const re of SCAM_REGEXES) {
+    if (re.test(analysed)) {
+      return { flagged: true, category: "scam", confidence: 92, matchedPattern: "scam_pattern" };
+    }
+  }
+
+  // Layer 8 — Spam / Gibberish / Zalgo
+  for (const re of SPAM_REGEXES) {
+    if (re.test(text)) {
+      return { flagged: true, category: "spam", confidence: 85, matchedPattern: "spam_pattern" };
+    }
+  }
+
+  // Layer 9 — NSFW / Adult content
+  for (const re of NSFW_REGEXES) {
+    if (re.test(analysed)) {
+      return { flagged: true, category: "nsfw", confidence: 90, matchedPattern: "nsfw_pattern" };
+    }
+  }
+
   return { flagged: false, category: "safe", confidence: 0 };
 }
 
@@ -201,6 +245,9 @@ export function categoryLabel(cat: ToxicCategory): string {
     case "slur":         return "Slur";
     case "explicit":     return "Explicit Content";
     case "self_harm":    return "Self-Harm Content";
+    case "scam":         return "Scam / Phishing";
+    case "spam":         return "Spam / Gibberish";
+    case "nsfw":         return "NSFW Content";
     default:             return "Safe";
   }
 }

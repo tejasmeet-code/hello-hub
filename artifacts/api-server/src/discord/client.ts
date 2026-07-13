@@ -762,20 +762,23 @@ export async function startDiscordBot(): Promise<void> {
         if (am.enabled) {
           const member = message.member;
           const content = message.content || "";
-          const isAdmin = member.permissions.has("Administrator");
           const exempted = (r: { exemptRoleIds: string[]; exemptChannelIds: string[] }) =>
-            isAdmin || r.exemptRoleIds.some((id) => member.roles.cache.has(id)) || r.exemptChannelIds.includes(message.channelId);
+            r.exemptRoleIds.some((id) => member.roles.cache.has(id)) || r.exemptChannelIds.includes(message.channelId);
           const doAction = async (action: string, reason: string, muteDuration: number) => {
-            if (action !== "warn") await message.delete().catch(() => {});
+            await message.delete().catch(() => {});
             if (action === "warn") {
-              await message.channel.send({ content: `${CE.warning.str} ${member} — ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 8000)).catch(() => {});
+              await message.channel.send({ content: `${CE.warning.str} ${member} — **Automod Warning**: ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 8000)).catch(() => {});
             } else if (action === "mute") {
               await member.timeout(muteDuration * 60_000, reason).catch(() => {});
               await message.channel.send({ content: `${CE.mute.str} Muted ${member} (${muteDuration}m): ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
             } else if (action === "kick") {
               await member.kick(reason).catch(() => {});
+              await message.channel.send({ content: `${CE.automod.str} Kicked ${member}: ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
             } else if (action === "ban") {
               await member.ban({ reason }).catch(() => {});
+              await message.channel.send({ content: `${CE.automod.str} Banned ${member}: ${reason}` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
+            } else {
+              await message.channel.send({ content: `${CE.automod.str} ${member} — Your message was removed by **Automod** (${reason}).` }).then((m) => setTimeout(() => m.delete().catch(() => {}), 8000)).catch(() => {});
             }
             if (am.logChannelId) {
               const logCh = message.guild?.channels.cache.get(am.logChannelId) as any;
@@ -790,50 +793,81 @@ export async function startDiscordBot(): Promise<void> {
             }
           };
           // Spam
-          if (am.spam.enabled && !exempted(am.spam)) {
-            if (recordSpam(message.guildId, message.author.id) >= am.spam.threshold) { await doAction(am.spam.action, "Spam", am.spam.muteDurationMinutes); return; }
+          if ((am.spam.enabled || am.enabled) && !exempted(am.spam)) {
+            if (recordSpam(message.guildId, message.author.id) >= (am.spam.threshold || 4)) { await doAction(am.spam.action || "delete", "Spam rate limit exceeded", am.spam.muteDurationMinutes || 10); return; }
           }
           // Duplicates
-          if (am.duplicates.enabled && !exempted(am.duplicates)) {
-            if (recordDuplicate(message.guildId, message.author.id, content)) { await doAction(am.duplicates.action, "Duplicate message", am.duplicates.muteDurationMinutes); return; }
+          if ((am.duplicates.enabled || am.enabled) && !exempted(am.duplicates)) {
+            if (recordDuplicate(message.guildId, message.author.id, content)) { await doAction(am.duplicates.action || "delete", "Duplicate message", am.duplicates.muteDurationMinutes || 10); return; }
           }
-          // Bad words
-          if (am.badWords.enabled && am.badWords.words.length > 0 && !exempted(am.badWords)) {
-            if (am.badWords.words.some((w) => content.toLowerCase().includes(w.toLowerCase()))) { await doAction(am.badWords.action, "Prohibited word", am.badWords.muteDurationMinutes); return; }
+          // Bad words (custom + built-in profanity)
+          if ((am.badWords.enabled || am.enabled) && !exempted(am.badWords)) {
+            const builtInWords = ["fuck", "shit", "bitch", "asshole", "cunt", "nigger", "faggot", "retard", "whore", "slut"];
+            const allWords = [...builtInWords, ...(am.badWords.words || [])];
+            if (allWords.some((w) => content.toLowerCase().includes(w.toLowerCase()))) { await doAction(am.badWords.action || "delete", "Prohibited language detected", am.badWords.muteDurationMinutes || 10); return; }
           }
           // Invites
-          if (am.invites.enabled && !exempted(am.invites) && /discord\.(gg|com\/invite)\//i.test(content)) { await doAction(am.invites.action, "Discord invites not allowed", am.invites.muteDurationMinutes); return; }
+          if ((am.invites.enabled || am.enabled) && !exempted(am.invites) && /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.com\/invite)\//i.test(content)) {
+            await doAction(am.invites.action || "delete", "Discord invites not allowed", am.invites.muteDurationMinutes || 10);
+            return;
+          }
           // Links
           if (am.links.enabled && !exempted(am.links)) {
-            const urls = content.match(/https?:\/\/([^\/\s]+)/gi) ?? [];
+            const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.(com|net|org|io|gg|co|xyz|info|biz|ru|cn|top)(\/[^\s]*)?)/gi;
+            const urls = content.match(urlRegex) ?? [];
             const allowed = am.links.whitelist.map((d) => d.toLowerCase());
-            if (urls.some((url) => { const dom = (url as string).replace(/https?:\/\//i,"").split("/")[0]!.toLowerCase(); return !allowed.some((a) => dom===a||dom.endsWith("."+a)); })) {
-              await doAction(am.links.action, "Links not allowed", am.links.muteDurationMinutes); return;
+            if (urls.length > 0 && urls.some((url) => { const dom = (url as string).replace(/https?:\/\//i,"").replace(/^www\./i,"").split("/")[0]!.toLowerCase(); return !allowed.some((a) => dom===a||dom.endsWith("."+a)); })) {
+              await doAction(am.links.action || "delete", "Links not allowed", am.links.muteDurationMinutes || 10); return;
             }
           }
           // Caps
-          if (am.caps.enabled && !exempted(am.caps) && content.length >= am.caps.minLength) {
+          if ((am.caps.enabled || am.enabled) && !exempted(am.caps) && content.length >= 6) {
             const caps = [...content].filter((c) => c>="A"&&c<="Z").length;
             const letters = [...content].filter((c) => (c>="A"&&c<="Z")||(c>="a"&&c<="z")).length;
-            if (letters>0 && (caps/letters)*100 >= am.caps.percent) { await doAction(am.caps.action, "Excessive caps", am.caps.muteDurationMinutes); return; }
+            if (letters >= 4 && (caps/letters)*100 >= (am.caps.percent || 70)) { await doAction(am.caps.action || "delete", "Excessive caps detected", am.caps.muteDurationMinutes || 10); return; }
           }
-          // Mentions
-          if (am.mentions.enabled && !exempted(am.mentions) && (message.mentions.users.size + message.mentions.roles.size) >= am.mentions.threshold) {
-            await doAction(am.mentions.action, "Mass mentions", am.mentions.muteDurationMinutes); return;
+          // Mentions / Pings
+          if ((am.mentions.enabled || am.enabled) && !exempted(am.mentions)) {
+            const mentionCount = message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 3 : 0);
+            if (mentionCount >= (am.mentions.threshold || 3)) {
+              await doAction(am.mentions.action || "delete", "Mass mentions / pings detected", am.mentions.muteDurationMinutes || 10); return;
+            }
           }
-          // Newlines
-          if (am.newlines.enabled && !exempted(am.newlines) && (content.match(/\n/g)??[]).length >= am.newlines.threshold) {
-            await doAction(am.newlines.action, "Excessive newlines", am.newlines.muteDurationMinutes); return;
+          // Newlines / Multilines
+          if ((am.newlines.enabled || am.enabled) && !exempted(am.newlines)) {
+            const newlineCount = (content.match(/\n/g) ?? []).length;
+            const consecutiveNewlines = /[\r\n]{4,}/.test(content);
+            if (newlineCount >= (am.newlines.threshold || 5) || consecutiveNewlines) {
+              await doAction(am.newlines.action || "delete", "Excessive newlines / multiline flooding", am.newlines.muteDurationMinutes || 10); return;
+            }
           }
-          // AI Automod
-          if (am.aiAutomod.enabled && !exempted(am.aiAutomod) && content.trim().length > 0) {
-            const { classifyContent, categoryLabel } = await import("./utils/aiAutomod");
-            const result = classifyContent(content, am.aiAutomod.whitelist ?? []);
-            const cats = am.aiAutomod.categories.length > 0 ? am.aiAutomod.categories : ["threat","hate_speech","slur","harassment","explicit","self_harm"];
-            if (result.flagged && cats.includes(result.category) && result.confidence >= am.aiAutomod.minConfidence) {
-              const reason = `AI Automod: ${categoryLabel(result.category)} detected (${result.confidence}% confidence)`;
-              await doAction(am.aiAutomod.action, reason, am.aiAutomod.muteDurationMinutes);
-              return;
+          // AI Automod (Text + NSFW)
+          if ((am.aiAutomod.enabled || am.enabled) && !exempted(am.aiAutomod)) {
+            const isNsfwChannel = Boolean((message.channel as any).nsfw);
+            // Check attachments for NSFW filenames in non-NSFW channels
+            if (!isNsfwChannel && message.attachments.size > 0) {
+              const nsfwAttachment = message.attachments.some((att) =>
+                /\b(nsfw|porn|hentai|nude|xxx|onlyfans|rule34)\b/i.test(att.name || "")
+              );
+              if (nsfwAttachment) {
+                await doAction(am.aiAutomod.action || "delete", "NSFW attachment detected in non-NSFW channel", am.aiAutomod.muteDurationMinutes || 10);
+                return;
+              }
+            }
+            if (content.trim().length > 0) {
+              const { classifyContent, categoryLabel } = await import("./utils/aiAutomod");
+              const result = classifyContent(content, am.aiAutomod.whitelist ?? []);
+              const cats = am.aiAutomod.categories.length > 0 ? am.aiAutomod.categories : ["threat","hate_speech","slur","harassment","explicit","self_harm","scam","spam","nsfw"];
+              if (result.flagged && (cats.includes(result.category) || result.category === "nsfw") && result.confidence >= (am.aiAutomod.minConfidence || 70)) {
+                // If NSFW content in an NSFW channel, allow it; otherwise flag
+                if (result.category === "nsfw" && isNsfwChannel) {
+                  // allowed in marked NSFW channels
+                } else {
+                  const reason = `AI Automod: ${categoryLabel(result.category)} detected (${result.confidence}% confidence)`;
+                  await doAction(am.aiAutomod.action || "delete", reason, am.aiAutomod.muteDurationMinutes || 10);
+                  return;
+                }
+              }
             }
           }
         }

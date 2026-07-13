@@ -75,11 +75,11 @@ export function defaultAutomodConfig(): AutomodConfig {
     badWords: { ...baseRule, words: [] },
     links: { ...baseRule, whitelist: [] },
     invites: { ...baseRule },
-    caps: { ...baseRule, percent: 70, minLength: 15 },
-    mentions: { ...baseRule, threshold: 5 },
+    caps: { ...baseRule, percent: 70, minLength: 6 },
+    mentions: { ...baseRule, threshold: 3 },
     duplicates: { ...baseRule, windowSeconds: 30 },
-    newlines: { ...baseRule, threshold: 10 },
-    aiAutomod: { ...baseRule, whitelist: [], categories: ["threat","hate_speech","slur","explicit","harassment","self_harm"], minConfidence: 75 },
+    newlines: { ...baseRule, threshold: 5 },
+    aiAutomod: { ...baseRule, whitelist: [], categories: ["threat","hate_speech","slur","explicit","harassment","self_harm","scam","spam","nsfw"], minConfidence: 70 },
   };
 }
 
