@@ -65,7 +65,10 @@ export const CE = {
   shoppingcart:  { str: "<:deal:1517469922630963241>",        id: "1517469922630963241", name: "deal",         animated: false },
   discount:      { str: "<:deal:1517469922630963241>",        id: "1517469922630963241", name: "deal",         animated: false },
   limited:       { str: "<:star:1517489066579333130>",        id: "1517489066579333130", name: "star",         animated: false },
+  star:          { str: "<:star:1517489066579333130>",        id: "1517489066579333130", name: "star",         animated: false },
   star_rating:   { str: "<:star:1517489066579333130>",        id: "1517489066579333130", name: "star",         animated: false },
+  heart:         { str: "<:soulmate:1517469827852144730>",    id: "1517469827852144730", name: "soulmate",     animated: false },
+  chat:          { str: "<:dm_sent:1517480357090295898>",     id: "1517480357090295898", name: "dm_sent",      animated: false },
   // ── Games / Fun ──────────────────────────────────────────────────────────
   giveaway:      { str: "<:giveaway:1517478245233201242>",    id: "1517478245233201242", name: "giveaway",     animated: false },
   trophy:        { str: "<:trophy:1517479909818236958>",      id: "1517479909818236958", name: "trophy",       animated: false },

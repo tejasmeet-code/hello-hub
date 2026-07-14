@@ -213,6 +213,30 @@ const MODULE_DEFS: ModuleDef[] = [
     channelKey: "staffDirectoryLog",
     description: "Interactive staff portal. Use 'Set Directory Roles' to configure roles.",
   },
+  {
+    id: "premium",
+    label: "Premium & Licensing",
+    emoji: CE.star,
+    moduleKey: "moderation",
+    channelKey: null,
+    description: "Manage User and Server-based Premium features and status.",
+  },
+  {
+    id: "autoReact",
+    label: "Auto-Reaction Channels",
+    emoji: CE.heart,
+    moduleKey: "moderation",
+    channelKey: null,
+    description: "Automatically react with specific emojis when messages are sent in configured channels.",
+  },
+  {
+    id: "responseChannel",
+    label: "Response Channels",
+    emoji: CE.chat,
+    moduleKey: "moderation",
+    channelKey: null,
+    description: "Custom auto-responder text when keywords or messages are sent in specific channels.",
+  },
 ];
 
 /** Modules that have custom per-module settings beyond channel/roles. */
@@ -227,6 +251,9 @@ const MODULES_WITH_SETTINGS = new Set([
   "loa",
   "staffReport",
   "antiNuke",
+  "premium",
+  "autoReact",
+  "responseChannel",
 ]);
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -973,6 +1000,59 @@ function buildSettingsEmbed(cfg: GuildConfig, modId: string): EmbedBuilder {
       );
       break;
     }
+    case "premium": {
+      e.setDescription("Manage and check your Premium status and features across this server and user account.");
+      e.addFields(
+        {
+          name: "Activate User Premium",
+          value: "Use `/premium-user code:<code>` to redeem your activation key.",
+          inline: false,
+        },
+        {
+          name: "Activate Server Premium",
+          value: "Use `/premium-server code:<code>` to unlock server-wide features.",
+          inline: false,
+        },
+        {
+          name: "Support & License Generation",
+          value: "Join our Official Support Server to open a ticket or generate keys (`/premium-generate`).",
+          inline: false,
+        },
+      );
+      break;
+    }
+    case "autoReact": {
+      e.setDescription("Configure automatic reaction triggers across server channels.");
+      e.addFields(
+        {
+          name: "Add Auto-Reaction Channel",
+          value: "Use `/autoreact add channel:<#id> emojis:<emojis>` to set up auto-reactions.",
+          inline: false,
+        },
+        {
+          name: "Manage & Remove",
+          value: "Use `/autoreact list` to view active channels and `/autoreact remove` to delete triggers.",
+          inline: false,
+        },
+      );
+      break;
+    }
+    case "responseChannel": {
+      e.setDescription("Configure custom auto-responders and trigger messages across specific channels.");
+      e.addFields(
+        {
+          name: "Add Response Channel Trigger",
+          value: "Use `/response-channel add channel:<#id> trigger:<text> response:<text>` to add responders.",
+          inline: false,
+        },
+        {
+          name: "Manage Responders",
+          value: "Use `/response-channel list` or `/response-channel remove` to inspect and clean triggers.",
+          inline: false,
+        },
+      );
+      break;
+    }
   }
 
   return e;
@@ -1209,6 +1289,36 @@ function settingsRows(cfg: GuildConfig, modId: string): Row[] {
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
           new ButtonBuilder()
             .setCustomId("cfg:mod:view:staffReport")
+            .setLabel("← Back")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ];
+    }
+    case "premium": {
+      return [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:mod:view:premium")
+            .setLabel("← Back")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ];
+    }
+    case "autoReact": {
+      return [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:mod:view:autoReact")
+            .setLabel("← Back")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ];
+    }
+    case "responseChannel": {
+      return [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:mod:view:responseChannel")
             .setLabel("← Back")
             .setStyle(ButtonStyle.Secondary),
         ),
