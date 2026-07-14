@@ -42,6 +42,7 @@ import {
   type AntiNukeMiniId,
 } from "../storage/config";
 import { CE } from "../utils/embedStyle";
+import { startSetupWizard } from "./setupWizard";
 import { isAdminOrOwner } from "../utils/staffPerms";
 import { PERM_WHITELIST } from "../storage/whitelist";
 import { logger } from "../../lib/logger";
@@ -214,6 +215,14 @@ const MODULE_DEFS: ModuleDef[] = [
     description: "Interactive staff portal. Use 'Set Directory Roles' to configure roles.",
   },
   {
+    id: "mainSetup",
+    label: "Server Setup & Main Roles",
+    emoji: CE.settings,
+    moduleKey: "moderation",
+    channelKey: null,
+    description: "Configure Main Member Role, Staff Common Role, and Hierarchy, or run the interactive wizard.",
+  },
+  {
     id: "premium",
     label: "Premium & Licensing",
     emoji: CE.star,
@@ -251,6 +260,7 @@ const MODULES_WITH_SETTINGS = new Set([
   "loa",
   "staffReport",
   "antiNuke",
+  "mainSetup",
   "premium",
   "autoReact",
   "responseChannel",
@@ -1000,6 +1010,40 @@ function buildSettingsEmbed(cfg: GuildConfig, modId: string): EmbedBuilder {
       );
       break;
     }
+    case "mainSetup": {
+      const isDone = cfg.setupWizardCompleted ?? false;
+      const mainRole = cfg.setupConfig?.mainRoleId ? `<@&${cfg.setupConfig.mainRoleId}>` : "*Not set*";
+      const staffRole = cfg.setupConfig?.staffCommonRoleId ? `<@&${cfg.setupConfig.staffCommonRoleId}>` : "*Not set*";
+      const hierarchy =
+        cfg.setupConfig?.staffRoleHierarchy && cfg.setupConfig.staffRoleHierarchy.length > 0
+          ? cfg.setupConfig.staffRoleHierarchy.map((r) => `<@&${r}>`).join(" -> ")
+          : "*Not set*";
+
+      e.setDescription("Configure your server's core membership and staff hierarchy roles, or launch the interactive wizard.");
+      e.addFields(
+        {
+          name: "Setup Status",
+          value: isDone ? `${CE.success.str} Completed & Unlocked` : `${CE.warning.str} Pending (/setup required)`,
+          inline: true,
+        },
+        {
+          name: "Main Member Role",
+          value: mainRole,
+          inline: true,
+        },
+        {
+          name: "Staff Common Role",
+          value: staffRole,
+          inline: true,
+        },
+        {
+          name: "Staff Role Hierarchy (Highest -> Lowest Authority)",
+          value: hierarchy,
+          inline: false,
+        },
+      );
+      break;
+    }
     case "premium": {
       e.setDescription("Manage and check your Premium status and features across this server and user account.");
       e.addFields(
@@ -1289,6 +1333,38 @@ function settingsRows(cfg: GuildConfig, modId: string): Row[] {
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
           new ButtonBuilder()
             .setCustomId("cfg:mod:view:staffReport")
+            .setLabel("← Back")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ];
+    }
+    case "mainSetup": {
+      return [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:mainSetup:wizard")
+            .setLabel("Run Setup Wizard")
+            .setStyle(ButtonStyle.Success)
+            .setEmoji(CE.settings.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:mainSetup:roleset:main")
+            .setLabel("Set Main Role")
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji(CE.members.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:mainSetup:roleset:staff")
+            .setLabel("Set Staff Role")
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji(CE.staff.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:mainSetup:modal:hierarchy")
+            .setLabel("Edit Hierarchy")
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji(CE.level.str),
+        ),
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:mod:view:mainSetup")
             .setLabel("← Back")
             .setStyle(ButtonStyle.Secondary),
         ),
@@ -5055,6 +5131,132 @@ const command: SlashCommand = {
             return c;
           });
           await safeUpdate(i, { embeds: [buildModuleEmbed(cfg, mod)], components: moduleActionRows(cfg, mod) });
+          return;
+        }
+
+        if (id === "cfg:mainSetup:wizard") {
+          await startSetupWizard(i as any);
+          return;
+        }
+
+        if (id === "cfg:mainSetup:roleset:main") {
+          const sel = new RoleSelectMenuBuilder()
+            .setCustomId("cfg:mainSetup:rolesetResult:main")
+            .setPlaceholder("Pick the Main Member Role...")
+            .setMinValues(1)
+            .setMaxValues(1);
+          const clearRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId("cfg:mainSetup:roleclear:main")
+              .setLabel("Clear Main Role")
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId("cfg:settings:view:mainSetup")
+              .setLabel("← Back")
+              .setStyle(ButtonStyle.Secondary),
+          );
+          await safeUpdate(i, {
+            embeds: [buildSettingsEmbed(cfg, "mainSetup").setDescription("Select the **Main Member Role** automatically assigned to everyone:")],
+            components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(sel), clearRow],
+          });
+          return;
+        }
+
+        if (id === "cfg:mainSetup:roleset:staff") {
+          const sel = new RoleSelectMenuBuilder()
+            .setCustomId("cfg:mainSetup:rolesetResult:staff")
+            .setPlaceholder("Pick the Staff Common Role...")
+            .setMinValues(1)
+            .setMaxValues(1);
+          const clearRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId("cfg:mainSetup:roleclear:staff")
+              .setLabel("Clear Staff Role")
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId("cfg:settings:view:mainSetup")
+              .setLabel("← Back")
+              .setStyle(ButtonStyle.Secondary),
+          );
+          await safeUpdate(i, {
+            embeds: [buildSettingsEmbed(cfg, "mainSetup").setDescription("Select the **Staff Common Role** shared by all staff members:")],
+            components: [new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(sel), clearRow],
+          });
+          return;
+        }
+
+        if (id.startsWith("cfg:mainSetup:rolesetResult:") && i.isRoleSelectMenu()) {
+          const target = id.slice("cfg:mainSetup:rolesetResult:".length);
+          const roleId = i.values[0];
+          cfg = await updateGuildConfig(guildId, (c) => {
+            const sc = c.setupConfig ?? {};
+            if (target === "main") sc.mainRoleId = roleId;
+            if (target === "staff") sc.staffCommonRoleId = roleId;
+            c.setupConfig = sc;
+            if (sc.mainRoleId || sc.staffCommonRoleId) c.setupWizardCompleted = true;
+            return c;
+          });
+          await safeUpdate(i, { embeds: [buildSettingsEmbed(cfg, "mainSetup")], components: settingsRows(cfg, "mainSetup") });
+          return;
+        }
+
+        if (id.startsWith("cfg:mainSetup:roleclear:")) {
+          const target = id.slice("cfg:mainSetup:roleclear:".length);
+          cfg = await updateGuildConfig(guildId, (c) => {
+            const sc = c.setupConfig ?? {};
+            if (target === "main") delete sc.mainRoleId;
+            if (target === "staff") delete sc.staffCommonRoleId;
+            c.setupConfig = sc;
+            return c;
+          });
+          await safeUpdate(i, { embeds: [buildSettingsEmbed(cfg, "mainSetup")], components: settingsRows(cfg, "mainSetup") });
+          return;
+        }
+
+        if (id === "cfg:mainSetup:modal:hierarchy") {
+          const sc = cfg.setupConfig ?? {};
+          const modal = new ModalBuilder()
+            .setCustomId("cfg:mainSetup:modalResult:hierarchy")
+            .setTitle("Staff Role Hierarchy")
+            .addComponents(
+              new ActionRowBuilder<TextInputBuilder>().addComponents(
+                new TextInputBuilder()
+                  .setCustomId("hierarchyInput")
+                  .setLabel("Role IDs (Highest Authority -> Lowest)")
+                  .setPlaceholder("111111, 222222, 333333")
+                  .setStyle(TextInputStyle.Paragraph)
+                  .setValue(sc.staffRoleHierarchy ? sc.staffRoleHierarchy.join(", ") : "")
+                  .setRequired(false),
+              ),
+            );
+          await i.showModal(modal);
+          let submit;
+          try {
+            submit = await i.awaitModalSubmit({
+              filter: (s) => s.customId === "cfg:mainSetup:modalResult:hierarchy" && s.user.id === i.user.id,
+              time: 5 * 60 * 1000,
+            });
+          } catch { return; }
+          const raw = submit.fields.getTextInputValue("hierarchyInput").trim();
+          const hierarchy: string[] = [];
+          if (raw) {
+            for (const item of raw.split(",")) {
+              const rId = item.trim();
+              if (/^\d+$/.test(rId)) hierarchy.push(rId);
+            }
+          }
+          cfg = await updateGuildConfig(guildId, (c) => {
+            const sc = c.setupConfig ?? {};
+            sc.staffRoleHierarchy = hierarchy;
+            c.setupConfig = sc;
+            c.setupWizardCompleted = true;
+            return c;
+          });
+          if (submit.isFromMessage()) {
+            await safeSubmitUpdate(submit, { embeds: [buildSettingsEmbed(cfg, "mainSetup")], components: settingsRows(cfg, "mainSetup") });
+          } else {
+            await submit.reply({ content: `Staff Role Hierarchy updated (${hierarchy.length} roles).`, flags: 1 << 6 });
+          }
           return;
         }
 

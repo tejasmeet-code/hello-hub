@@ -28,6 +28,46 @@ interface WizardState {
 
 const activeWizards = new Map<string, WizardState>();
 
+export async function startSetupWizard(interaction: ChatInputCommandInteraction | ButtonInteraction): Promise<void> {
+  if (!interaction.guildId || !interaction.guild) {
+    const msg = { content: "This command can only be used inside a server.", ephemeral: true };
+    if (interaction.isButton()) await interaction.reply(msg);
+    else await interaction.reply(msg);
+    return;
+  }
+
+  const state: WizardState = { step: 1 };
+  activeWizards.set(`${interaction.guildId}:${interaction.user.id}`, state);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${CE.settings.str} Server Setup Wizard — Step 1/3: Main Role`)
+    .setDescription(
+      "Select the **Main Role ID** that is automatically assigned to every general member.\n\nUse the role selector below or click **Skip Step 1** to bypass.",
+    )
+    .setColor(0x2b2d31);
+
+  const selectRow = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId("wiz:step1:select")
+      .setPlaceholder("Select Main Role (Default Member Role)...")
+      .setMinValues(1)
+      .setMaxValues(1),
+  );
+
+  const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("wiz:step1:skip")
+      .setLabel("Skip Step 1")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  if (interaction.isButton()) {
+    await interaction.update({ embeds: [embed], components: [selectRow, btnRow] });
+  } else {
+    await interaction.reply({ embeds: [embed], components: [selectRow, btnRow] });
+  }
+}
+
 export const setupWizardCommand: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("setup")
@@ -35,37 +75,7 @@ export const setupWizardCommand: SlashCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    if (!interaction.guildId || !interaction.guild) {
-      await interaction.reply({ content: "This command can only be used inside a server.", ephemeral: true });
-      return;
-    }
-
-    const state: WizardState = { step: 1 };
-    activeWizards.set(`${interaction.guildId}:${interaction.user.id}`, state);
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${CE.settings.str} Server Setup Wizard — Step 1/3: Main Role`)
-      .setDescription(
-        "Select the **Main Role ID** that is automatically assigned to every general member.\n\nUse the role selector below or click **Skip Step 1** to bypass.",
-      )
-      .setColor(0x2b2d31);
-
-    const selectRow = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
-      new RoleSelectMenuBuilder()
-        .setCustomId("wiz:step1:select")
-        .setPlaceholder("Select Main Role (Default Member Role)...")
-        .setMinValues(1)
-        .setMaxValues(1),
-    );
-
-    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("wiz:step1:skip")
-        .setLabel("Skip Step 1")
-        .setStyle(ButtonStyle.Secondary),
-    );
-
-    await interaction.reply({ embeds: [embed], components: [selectRow, btnRow] });
+    await startSetupWizard(interaction);
   },
 };
 
