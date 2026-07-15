@@ -246,6 +246,22 @@ const MODULE_DEFS: ModuleDef[] = [
     channelKey: null,
     description: "Custom auto-responder text when keywords or messages are sent in specific channels.",
   },
+  {
+    id: "afk",
+    label: "AFK Status System",
+    emoji: CE.clock,
+    moduleKey: "afk",
+    channelKey: null,
+    description: "Allow members to set an AFK status with custom reasons and global or server-only scopes.",
+  },
+  {
+    id: "noPrefix",
+    label: "No-Prefix & NLP Commands",
+    emoji: CE.star,
+    moduleKey: "noPrefix",
+    channelKey: null,
+    description: "Execute commands naturally without prefixes (e.g., 'ban @user'). Configure whitelisted users and roles.",
+  },
 ];
 
 /** Modules that have custom per-module settings beyond channel/roles. */
@@ -264,6 +280,8 @@ const MODULES_WITH_SETTINGS = new Set([
   "premium",
   "autoReact",
   "responseChannel",
+  "afk",
+  "noPrefix",
 ]);
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -1097,6 +1115,54 @@ function buildSettingsEmbed(cfg: GuildConfig, modId: string): EmbedBuilder {
       );
       break;
     }
+    case "afk": {
+      const isEnabled = cfg.modules.afk !== false;
+      e.setDescription("Configure the AFK Status system for your server members.");
+      e.addFields(
+        {
+          name: "Status",
+          value: isEnabled ? `${CE.success.str} Enabled` : `${CE.error.str} Disabled`,
+          inline: true,
+        },
+        {
+          name: "Usage",
+          value: "Members can type `/afk set reason:<text>` to mark themselves AFK. The bot will automatically notify anyone who pings them and clear AFK when they return and send a message.",
+          inline: false,
+        },
+      );
+      e.setFooter({ text: "Use the toggle button below to enable/disable AFK globally in this server." });
+      break;
+    }
+    case "noPrefix": {
+      const isEnabled = cfg.modules.noPrefix !== false;
+      const userCount = (cfg.noPrefixUserIds ?? []).length;
+      const roleCount = (cfg.noPrefixRoles ?? []).length;
+      e.setDescription("Configure No-Prefix & NLP command execution for your server.");
+      e.addFields(
+        {
+          name: "Module Status",
+          value: isEnabled ? `${CE.success.str} Enabled` : `${CE.error.str} Disabled`,
+          inline: true,
+        },
+        {
+          name: "Whitelisted Users",
+          value: userCount > 0 ? `${userCount} user(s) whitelisted` : "None (Only Premium/Admin)",
+          inline: true,
+        },
+        {
+          name: "Whitelisted Roles",
+          value: roleCount > 0 ? `${roleCount} role(s) whitelisted` : "None (Only Premium/Admin)",
+          inline: true,
+        },
+        {
+          name: "How it Works",
+          value: "When enabled, whitelisted users/roles (and bot admins / premium servers) can type commands naturally without a prefix (e.g. `ban @user spamming` or `help`).",
+          inline: false,
+        },
+      );
+      e.setFooter({ text: "Use the buttons below to toggle No-Prefix or manage whitelist exemptions." });
+      break;
+    }
   }
 
   return e;
@@ -1395,6 +1461,55 @@ function settingsRows(cfg: GuildConfig, modId: string): Row[] {
         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
           new ButtonBuilder()
             .setCustomId("cfg:mod:view:responseChannel")
+            .setLabel("← Back")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ];
+    }
+    case "afk": {
+      const isEnabled = cfg.modules.afk !== false;
+      return [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:settings:toggle:afk:status")
+            .setLabel(isEnabled ? "Disable AFK Module" : "Enable AFK Module")
+            .setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
+            .setEmoji(isEnabled ? CE.error.str : CE.success.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:mod:view:afk")
+            .setLabel("← Back")
+            .setStyle(ButtonStyle.Secondary),
+        ),
+      ];
+    }
+    case "noPrefix": {
+      const isEnabled = cfg.modules.noPrefix !== false;
+      return [
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:settings:toggle:noPrefix:status")
+            .setLabel(isEnabled ? "Disable Module" : "Enable Module")
+            .setStyle(isEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
+            .setEmoji(isEnabled ? CE.error.str : CE.success.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:noPrefix:add")
+            .setLabel("Add Exempt User")
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji(CE.members.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:noPrefix:remove")
+            .setLabel("Remove Exempt User")
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji(CE.members.str),
+          new ButtonBuilder()
+            .setCustomId("cfg:noPrefix:view")
+            .setLabel("View Whitelist")
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji(CE.information.str),
+        ),
+        new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("cfg:mod:view:noPrefix")
             .setLabel("← Back")
             .setStyle(ButtonStyle.Secondary),
         ),
@@ -5302,6 +5417,7 @@ const command: SlashCommand = {
           cfg = await updateGuildConfig(guildId, (c) => {
             if (!c.moduleRoles) c.moduleRoles = {};
             c.moduleRoles[modId] = roleIds;
+            if (modId === "noPrefix") c.noPrefixRoles = roleIds;
             return c;
           });
           await safeUpdate(i, { embeds: [buildModuleEmbed(cfg, mod)], components: moduleActionRows(cfg, mod) });
@@ -5315,6 +5431,7 @@ const command: SlashCommand = {
           cfg = await updateGuildConfig(guildId, (c) => {
             if (!c.moduleRoles) c.moduleRoles = {};
             c.moduleRoles[modId] = [];
+            if (modId === "noPrefix") c.noPrefixRoles = [];
             return c;
           });
           await safeUpdate(i, { embeds: [buildModuleEmbed(cfg, mod)], components: moduleActionRows(cfg, mod) });
@@ -5390,6 +5507,14 @@ const command: SlashCommand = {
                 c.antiNukeConfig = s;
                 break;
               }
+              case "afk": {
+                c.modules.afk = c.modules.afk === false ? true : false;
+                break;
+              }
+              case "noPrefix": {
+                c.modules.noPrefix = c.modules.noPrefix === false ? true : false;
+                break;
+              }
             }
             return c;
           });
@@ -5397,6 +5522,81 @@ const command: SlashCommand = {
           await safeUpdate(i, {
             embeds: [buildSettingsEmbed(cfg, modId)],
             components: settingsRows(cfg, modId),
+          });
+          return;
+        }
+
+        if (id === "cfg:noPrefix:add") {
+          const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+            new UserSelectMenuBuilder()
+              .setCustomId("cfg:noPrefix:userselect:add")
+              .setPlaceholder("Select a user to exempt for No-Prefix commands")
+              .setMinValues(1)
+              .setMaxValues(1)
+          );
+          await i.reply({
+            content: "Select a user below to grant No-Prefix command execution access:",
+            components: [row],
+            ephemeral: true,
+          });
+          return;
+        }
+
+        if (id === "cfg:noPrefix:remove") {
+          const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+            new UserSelectMenuBuilder()
+              .setCustomId("cfg:noPrefix:userselect:remove")
+              .setPlaceholder("Select a user to remove from No-Prefix whitelist")
+              .setMinValues(1)
+              .setMaxValues(1)
+          );
+          await i.reply({
+            content: "Select a user below to revoke No-Prefix command access:",
+            components: [row],
+            ephemeral: true,
+          });
+          return;
+        }
+
+        if (id === "cfg:noPrefix:view") {
+          cfg = await getGuildConfig(guildId);
+          const users = (cfg.noPrefixUserIds ?? []).map((u) => `<@${u}> (\`${u}\`)`).join("\n") || "None";
+          const roles = (cfg.noPrefixRoles ?? []).map((r) => `<@&${r}> (\`${r}\`)`).join("\n") || "None";
+          await i.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(`${CE.star.str} No-Prefix Whitelist & Exemptions`)
+                .setColor(0x2b2d31)
+                .addFields(
+                  { name: "Exempt Users", value: users, inline: false },
+                  { name: "Exempt Roles", value: roles, inline: false }
+                )
+            ],
+            ephemeral: true,
+          });
+          return;
+        }
+
+        if (i.isUserSelectMenu() && id.startsWith("cfg:noPrefix:userselect:")) {
+          const action = id.split(":")[3]; // add or remove
+          const selectedUserId = i.values[0];
+          if (!selectedUserId) return;
+
+          cfg = await updateGuildConfig(guildId, (c) => {
+            if (!c.noPrefixUserIds) c.noPrefixUserIds = [];
+            if (action === "add") {
+              if (!c.noPrefixUserIds.includes(selectedUserId)) c.noPrefixUserIds.push(selectedUserId);
+            } else if (action === "remove") {
+              c.noPrefixUserIds = c.noPrefixUserIds.filter((u) => u !== selectedUserId);
+            }
+            return c;
+          });
+
+          await i.update({
+            content: action === "add"
+              ? `${CE.success.str} <@${selectedUserId}> has been added to the No-Prefix whitelist!`
+              : `${CE.success.str} <@${selectedUserId}> has been removed from the No-Prefix whitelist!`,
+            components: [],
           });
           return;
         }

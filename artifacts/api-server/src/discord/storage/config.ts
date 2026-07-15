@@ -24,6 +24,8 @@ export interface GuildModules {
   serverMaintenance: boolean;
   automations?: boolean;
   staffDirectory?: boolean;
+  afk?: boolean;
+  noPrefix?: boolean;
 }
 
 export interface GuildChannels {
@@ -218,6 +220,8 @@ export interface GuildConfig {
     targetId: string;
     emoji: string;
   }>;
+  noPrefixUserIds?: string[];
+  noPrefixRoles?: string[];
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -228,7 +232,7 @@ const DEFAULTS: GuildConfig = {
     staffMgmt: true, quota: true, auditLog: true, moderation: true,
     infractions: true, appeals: true, loa: true, partnership: true,
     verify: true, banRequest: true, roleMemory: true, antiNuke: false,
-    serverMaintenance: false, staffDirectory: false,
+    serverMaintenance: false, staffDirectory: false, afk: true, noPrefix: true,
   },
   channels: {},
   moduleRoles: {},

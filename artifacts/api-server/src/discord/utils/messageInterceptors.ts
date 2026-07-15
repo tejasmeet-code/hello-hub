@@ -1,8 +1,9 @@
 import type { Message } from "discord.js";
 import { getAFK, removeAFK } from "../storage/afk";
 import { getGuildConfig } from "../storage/config";
-import { hasPremiumAccess } from "../storage/premium";
+import { hasPremiumAccess, isBotAdmin } from "../storage/premium";
 import { getCommandMap } from "../registry";
+import { handleGenericPrefixCommand } from "../messageHandler";
 import { CE } from "./embedStyle";
 import { logger } from "../../lib/logger";
 
@@ -24,40 +25,36 @@ export async function handleAFKMessage(message: Message): Promise<void> {
   if (message.mentions.users.size > 0) {
     for (const [userId, user] of message.mentions.users.entries()) {
       if (userId === message.author.id) continue;
-      const targetAfk = await getAFK(userId);
-      if (!targetAfk) continue;
-
-      if (targetAfk.scope === "server" && targetAfk.guildId && targetAfk.guildId !== message.guildId) {
-        continue;
+      const afk = await getAFK(userId);
+      if (afk && (afk.scope === "global" || afk.guildId === message.guildId)) {
+        await message.reply({
+          content: `ℹ️ **${user.tag}** is currently AFK (${afk.scope === "global" ? "Global" : "Server-Only"}): \`${afk.reason}\` (since <t:${afk.timestamp}:R>)`,
+          allowedMentions: { parse: [] },
+        }).catch(() => {});
       }
-
-      const relTime = `<t:${Math.floor(targetAfk.timestamp / 1000)}:R>`;
-      await message.reply({
-        content: `${CE.notifications.str} **${user.username}** is currently AFK (${relTime}): ${targetAfk.reason}`,
-      }).catch(() => {});
     }
   }
 }
 
 export async function handleAutoReactMessage(message: Message): Promise<void> {
-  if (message.author.bot || !message.guildId) return;
+  if (message.author.bot || !message.inGuild()) return;
 
   try {
     const cfg = await getGuildConfig(message.guildId);
-    const mappings = cfg.autoReactMappings;
-    if (!mappings || mappings.length === 0) return;
-
-    const authorId = message.author.id;
-    const channelId = message.channelId;
-    const parentId = "parentId" in message.channel ? (message.channel.parentId ?? null) : null;
+    const mappings = cfg.autoReactMappings || [];
+    if (mappings.length === 0) return;
 
     for (const m of mappings) {
-      let matches = false;
-      if (m.targetType === "user" && m.targetId === authorId) matches = true;
-      else if (m.targetType === "channel" && m.targetId === channelId) matches = true;
-      else if (m.targetType === "category" && parentId && m.targetId === parentId) matches = true;
+      let shouldReact = false;
+      if (m.targetType === "channel" && message.channelId === m.targetId) {
+        shouldReact = true;
+      } else if (m.targetType === "user" && message.author.id === m.targetId) {
+        shouldReact = true;
+      } else if (m.targetType === "category" && message.channel && (message.channel as any).parentId === m.targetId) {
+        shouldReact = true;
+      }
 
-      if (matches && m.emoji) {
+      if (shouldReact) {
         await message.react(m.emoji).catch(() => {});
       }
     }
@@ -75,19 +72,24 @@ export async function handleNoPrefixNLPMessage(message: Message): Promise<boolea
   // Ignore if already starting with prefix or slash
   if (content.startsWith(".") || content.startsWith("/") || content.startsWith("!")) return false;
 
-  // Check if user or guild has Premium Access
+  const cfg = await getGuildConfig(message.guildId);
+  if (cfg.modules.noPrefix === false && !isBotAdmin(message.author.id)) return false;
+
   const isPremium = await hasPremiumAccess(message.author.id, message.guildId);
-  if (!isPremium) return false;
+  const isWhitelistedUser = (cfg.noPrefixUserIds ?? []).includes(message.author.id);
+  const exemptRoles = [...(cfg.noPrefixRoles ?? []), ...(cfg.moduleRoles?.noPrefix ?? [])];
+  const isWhitelistedRole = message.member && exemptRoles.some((r) => message.member!.roles.cache.has(r));
+  const isAdminUser = isBotAdmin(message.author.id);
+
+  if (!isPremium && !isWhitelistedUser && !isWhitelistedRole && !isAdminUser) return false;
 
   const tokens = content.split(/\s+/);
   const firstWord = (tokens[0] || "").toLowerCase();
 
-  // Safe fuzzy or direct matching against registered slash command names
   const commandMap = getCommandMap();
   let matchedCommand = commandMap.get(firstWord);
 
   if (!matchedCommand) {
-    // Check if firstWord is close partial match (e.g., minimum 3 letters and command starts with firstWord)
     if (firstWord.length >= 3) {
       for (const [name, cmd] of commandMap.entries()) {
         if (name === firstWord || (name.startsWith(firstWord) && Math.abs(name.length - firstWord.length) <= 2)) {
@@ -100,8 +102,6 @@ export async function handleNoPrefixNLPMessage(message: Message): Promise<boolea
 
   if (!matchedCommand) return false;
 
-  // Check setup wizard restriction
-  const cfg = await getGuildConfig(message.guildId);
   if (!cfg.setupWizardCompleted && matchedCommand.data.name !== "setup" && matchedCommand.data.name !== "help") {
     await message.reply({
       content: "⚠️ Normal command usage is restricted until a server administrator runs the `/setup` onboarding wizard.",
@@ -109,46 +109,12 @@ export async function handleNoPrefixNLPMessage(message: Message): Promise<boolea
     return true;
   }
 
-  // Execute command seamlessly via simulated interaction/prefix bridge
   const args = tokens.slice(1);
   try {
-    const fakeInteraction = createFakeInteractionFromMessage(message, matchedCommand.data.name, args);
-    await matchedCommand.execute(fakeInteraction as any);
+    await handleGenericPrefixCommand(message, message.guild!, message.member, matchedCommand, args);
     return true;
   } catch (err) {
     logger.error({ err, commandName: matchedCommand.data.name }, "Error executing NLP No-Prefix command");
     return false;
   }
-}
-
-function createFakeInteractionFromMessage(message: Message, commandName: string, args: string[]) {
-  const channel = message.channel;
-  return {
-    isChatInputCommand: () => true,
-    commandName,
-    guildId: message.guildId,
-    guild: message.guild,
-    channelId: message.channelId,
-    channel,
-    user: message.author,
-    member: message.member,
-    client: message.client,
-    createdAt: message.createdAt,
-    deferred: false,
-    replied: false,
-    options: {
-      getString: (name: string, required?: boolean) => args[0] ?? (required ? "" : null),
-      getUser: (name: string) => message.mentions.users.first() ?? null,
-      getMember: (name: string) => message.mentions.members?.first() ?? null,
-      getChannel: (name: string) => message.mentions.channels.first() ?? null,
-      getRole: (name: string) => message.mentions.roles.first() ?? null,
-      getInteger: (name: string) => (args[0] ? parseInt(args[0], 10) : null),
-      getBoolean: (name: string) => (args[0] ? args[0].toLowerCase() === "true" : null),
-      getSubcommand: () => args[0] ?? null,
-    },
-    reply: async (payload: any) => message.reply(payload),
-    editReply: async (payload: any) => message.reply(payload),
-    followUp: async (payload: any) => message.reply(payload),
-    deferReply: async () => {},
-  };
 }

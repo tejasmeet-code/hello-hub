@@ -5,7 +5,7 @@ import { ensureJailRole } from "./storage/jail";
 import { registerGuildCommands } from "./registry/registerGuildCommands";
 import { incrementGuildCount } from "./storage/guild-counter";
 import { sendWebhookList, logCommandExecution } from "./utils/webhooks";
-import { CE } from "./utils/embedStyle";
+import { CE, setCachedBotName } from "./utils/embedStyle";
 import { logger } from "../lib/logger";
 import { getCommands, getCommandMap, getGuildCommands } from "./registry";
 import { handlePrefixMessage } from "./messageHandler";
@@ -68,6 +68,7 @@ export async function startDiscordBot(): Promise<void> {
   // guilds immediately, and GuildCreate handles new servers.
   // ────────────────────────────────────────────────────────────────────
   client.once(Events.ClientReady, async (readyClient: Client<true>) => {
+    setCachedBotName(readyClient.user.username);
     logger.info({ tag: readyClient.user.tag }, "Discord bot ready");
 
     // ── Giveaway auto-end scheduler (check every 60s) ──────────────────────

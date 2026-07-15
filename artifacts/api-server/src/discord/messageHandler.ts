@@ -293,7 +293,7 @@ export async function handlePrefixMessage(message: Message): Promise<void> {
  * Format: {prefix}{cmd} [subcmdGroup] [subcmd] [arg1] [arg2] ...
  * Maps arguments sequentially to the SlashCommand's declared options.
  */
-async function handleGenericPrefixCommand(
+export async function handleGenericPrefixCommand(
   message: Message,
   guild: NonNullable<Message["guild"]>,
   member: import("discord.js").GuildMember | null,

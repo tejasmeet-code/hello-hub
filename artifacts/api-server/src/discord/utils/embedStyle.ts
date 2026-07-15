@@ -1,5 +1,17 @@
 import { EmbedBuilder, type APIEmbedField, type ColorResolvable } from "discord.js";
 
+let cachedBotName = "Bot";
+
+export function setCachedBotName(name: string | null | undefined): void {
+  if (name && name.trim()) {
+    cachedBotName = name.trim();
+  }
+}
+
+export function getBotName(): string {
+  return cachedBotName;
+}
+
 export const COLORS = {
   primary: 0x2b2d31,
   success: 0x57f287,
@@ -271,7 +283,7 @@ export function modActionEmbed(opts: ModActionOpts): EmbedBuilder {
         ...(opts.extraFields || [])
       ])
     )
-    .setFooter({ text: "Relosta Bot • Moderation" })
+    .setFooter({ text: `${getBotName()} • Moderation` })
     .setTimestamp(new Date());
     
   if (opts.emoji) {
