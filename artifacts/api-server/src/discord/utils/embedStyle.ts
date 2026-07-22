@@ -113,6 +113,7 @@ export const CE = {
   // ── Misc UI (no custom version — keep unicode for game boards only) ───────
   draw:          { str: "🤝",  id: "", name: "draw",         animated: false },
   stop:          { str: "🛑",  id: "", name: "stop",         animated: false },
+  clock:         { str: "⏰",  id: "", name: "clock",        animated: false },
   media:         { str: "<:clipboard:1517488639888719882>",   id: "1517488639888719882", name: "clipboard",    animated: false },
   prank:         { str: "<:luck:1517468770069778583>",        id: "1517468770069778583", name: "luck",         animated: false },
   upvote:        { str: "<:tick:1517479233784643634>",        id: "1517479233784643634", name: "tick",         animated: false },
